@@ -7,12 +7,16 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService.RemoteViewsFactory
+import androidx.core.graphics.ColorUtils
 import com.philkes.notallyx.NotallyXApplication
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.NotallyDatabase
 import com.philkes.notallyx.data.dao.WidgetNoteChoice
+import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.presentation.activity.note.EditActivity.Companion.EXTRA_SELECTED_BASE_NOTE
+import com.philkes.notallyx.presentation.getContrastFontColor
+import com.philkes.notallyx.presentation.getSlightContrastColor
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.extractWidgetColors
 
@@ -24,7 +28,6 @@ internal class WidgetNoteChoicesFactory(
     private val preferences = NotallyXPreferences.getInstance(app)
     private var choices = emptyList<WidgetNoteChoice>()
     private var selectedId = 0L
-    private var textColor = 0
 
     override fun onCreate() {}
 
@@ -33,8 +36,6 @@ internal class WidgetNoteChoicesFactory(
         selectedId = preferences.getWidgetData(widgetId)
         if (selectedId == 0L || (preferences.isLockEnabled && app.locked.value)) return
         val dao = NotallyDatabase.getDatabase(app).value?.getBaseNoteDao() ?: return
-        val header = dao.getWidgetNoteHeader(selectedId) ?: return
-        textColor = app.extractWidgetColors(header.color, preferences).second
         choices = dao.getWidgetNoteChoices()
     }
 
@@ -60,9 +61,20 @@ internal class WidgetNoteChoicesFactory(
                     setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             } else title
+        val (neutral, neutralText) = app.extractWidgetColors(BaseNote.COLOR_DEFAULT, preferences)
+        val (noteColor, noteText) = app.extractWidgetColors(choice.color, preferences)
+        val tintedBackground = ColorUtils.blendARGB(neutral, noteColor, 0.4f)
+        val background =
+            if (position % 2 == 0) tintedBackground else tintedBackground.getSlightContrastColor()
+        val stripe =
+            if (choice.color == BaseNote.COLOR_DEFAULT)
+                ColorUtils.blendARGB(neutral, neutralText, 0.45f)
+            else ColorUtils.blendARGB(noteColor, noteText, 0.25f)
         return RemoteViews(app.packageName, R.layout.widget_note_choice).apply {
+            setInt(R.id.WidgetNoteChoiceRow, "setBackgroundColor", background)
+            setInt(R.id.WidgetNoteChoiceStripe, "setBackgroundColor", stripe)
             setTextViewText(R.id.WidgetNoteChoice, label)
-            setTextColor(R.id.WidgetNoteChoice, textColor)
+            setTextColor(R.id.WidgetNoteChoice, app.getContrastFontColor(background))
             setOnClickFillInIntent(
                 R.id.WidgetNoteChoice,
                 Intent().putExtra(EXTRA_SELECTED_BASE_NOTE, choice.id),

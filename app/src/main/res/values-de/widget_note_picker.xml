@@ -2,6 +2,7 @@
 <resources>
     <string name="widget_switch_note">Notiz wechseln</string>
     <string name="widget_close_note_picker">Notizliste schließen</string>
+    <string name="widget_open_notes_overview">Notizübersicht öffnen</string>
     <string name="widget_no_notes">Keine Notizen oder Listen</string>
     <string name="widget_untitled_note">Notiz ohne Titel</string>
     <string name="widget_untitled_list">Liste ohne Titel</string>

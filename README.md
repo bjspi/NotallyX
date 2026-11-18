@@ -17,6 +17,7 @@
 
 - The title and controls share the top row. The widget renders Markdown notes and preserves formatting in rich-text notes.
 - Tap the **down arrow** to the left of the note icon for a scrollable list of active note and checklist titles. Tap a title to switch the widget and close the list. Pinned notes come first, followed by the most recently edited. The note icon opens the full picker. [Quick switch](app/src/screenshots/WidgetNotePickerTest/open.png)
+- In the **Select note** list, each row has a color stripe based on its note and a lightly tinted background that alternates between rows. The **home icon** in the list header opens the main notes overview.
 - Tap the **Voice+ microphone** to record. Android may ask for microphone permission the first time. The widget shows the elapsed time. **Stop** attaches the M4A recording to the note that was selected when recording began, even if you switch the widget to a different note mid-recording.
 - Tap the **trash icon** while recording to open a confirmation dialog. **Discard** ends the recording without attaching it. **Cancel** keeps it running.
 

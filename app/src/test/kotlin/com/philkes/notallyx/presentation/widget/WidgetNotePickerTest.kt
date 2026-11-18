@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Intent
+import android.graphics.drawable.ColorDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
@@ -16,6 +17,7 @@ import com.philkes.notallyx.R
 import com.philkes.notallyx.data.imports.google.GoogleKeepImporterTest.Companion.createBaseNote
 import com.philkes.notallyx.data.model.Folder
 import com.philkes.notallyx.data.model.Type
+import com.philkes.notallyx.presentation.activity.main.MainActivity
 import com.philkes.notallyx.presentation.activity.note.EditActivity.Companion.EXTRA_SELECTED_BASE_NOTE
 import com.philkes.notallyx.test.app
 import com.philkes.notallyx.test.database
@@ -23,6 +25,7 @@ import com.philkes.notallyx.test.preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -49,9 +52,13 @@ class WidgetNotePickerTest {
                     .getBaseNoteDao()
                     .insert(
                         listOf(
-                            createBaseNote(title = "Trip ideas", body = "Private note body")
+                            createBaseNote(
+                                    title = "Trip ideas",
+                                    body = "Private note body",
+                                    color = "#82B1FF",
+                                )
                                 .copy(pinned = true, modifiedTimestamp = Long.MAX_VALUE - 1),
-                            createBaseNote(title = "Shopping")
+                            createBaseNote(title = "Shopping", color = "#FFCC80")
                                 .copy(
                                     type = Type.LIST,
                                     pinned = true,
@@ -94,15 +101,32 @@ class WidgetNotePickerTest {
             assertEquals(listOf(list, note, notes[4]), choiceIds.filter { it in notes })
             assertEquals(list, factory.getItemId(0))
             val root = host.getViewFor(widgetId)
+            assertEquals(
+                app.getString(R.string.select_note),
+                root.findViewById<TextView>(R.id.WidgetNotePickerTitle).text.toString(),
+            )
             val choices = root.findViewById<ListView>(R.id.WidgetNoteChoices)
-            val rows =
-                (0..2).map { index -> factory.getViewAt(index)!!.apply(app, choices) as TextView }
+            val rows = (0..2).map { index -> factory.getViewAt(index)!!.apply(app, choices) }
             assertEquals(
                 listOf("Shopping", "Trip ideas", app.getString(R.string.widget_untitled_note)),
-                rows.map { it.text.toString() },
+                rows.map { it.findViewById<TextView>(R.id.WidgetNoteChoice).text.toString() },
             )
+            val rowColors = rows.map { (it.background as ColorDrawable).color }
+            val stripeColors = rows.map {
+                (it.findViewById<View>(R.id.WidgetNoteChoiceStripe).background as ColorDrawable)
+                    .color
+            }
+            assertEquals(3, rowColors.distinct().size)
+            assertEquals(3, stripeColors.distinct().size)
+            assertNotEquals(rowColors, stripeColors)
             val template = choices.tag as PendingIntent
             capture(root, choices, factory)
+
+            assertTrue(root.findViewById<View>(R.id.WidgetOpenNotes).performClick())
+            ShadowLooper.idleMainLooper()
+            val overview = checkNotNull(shadowOf(app).nextStartedActivity)
+            assertEquals(MainActivity::class.java.name, overview.component?.className)
+            assertEquals(MainActivity.ACTION_OPEN_NOTES_OVERVIEW, overview.action)
 
             template.send(app, 0, Intent().putExtra(EXTRA_SELECTED_BASE_NOTE, list))
             awaitTitle({ host.getViewFor(widgetId) }, "Shopping")

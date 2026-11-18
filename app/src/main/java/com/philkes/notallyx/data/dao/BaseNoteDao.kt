@@ -38,7 +38,7 @@ data class NoteIndex(
 
 data class WidgetNoteHeader(val title: String, val color: ColorString, val type: Type)
 
-data class WidgetNoteChoice(val id: Long, val title: String, val type: Type)
+data class WidgetNoteChoice(val id: Long, val title: String, val type: Type, val color: ColorString)
 
 data class NoteReminder(
     val id: Long,
@@ -184,7 +184,7 @@ interface BaseNoteDao {
     fun getWidgetNoteHeader(id: Long): WidgetNoteHeader?
 
     @Query(
-        "SELECT id, title, type FROM BaseNote WHERE folder = 'NOTES' " +
+        "SELECT id, title, type, color FROM BaseNote WHERE folder = 'NOTES' " +
             "ORDER BY pinned DESC, modifiedTimestamp DESC, id DESC"
     )
     fun getWidgetNoteChoices(): List<WidgetNoteChoice>

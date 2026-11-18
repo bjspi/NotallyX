@@ -159,6 +159,15 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         // Observers are started in checkForMigrations -> proceed()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == ACTION_OPEN_NOTES_OVERVIEW) {
+            setIntent(intent)
+            notallyFragmentModel.keyword = ""
+            navigateWithAnimation(R.id.Notes)
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -186,7 +195,9 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         val proceed: () -> Unit = {
             mainActivityViewModel.startObserving()
             val fragmentIdToLoad = intent.getIntExtra(EXTRA_FRAGMENT_TO_OPEN, -1)
-            if (fragmentIdToLoad != -1) {
+            if (intent.action == ACTION_OPEN_NOTES_OVERVIEW) {
+                navigateWithAnimation(R.id.Notes)
+            } else if (fragmentIdToLoad != -1) {
                 navController.navigate(fragmentIdToLoad, intent.extras)
             } else if (savedInstanceState == null) {
                 navigateToStartView()
@@ -664,6 +675,8 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
     }
 
     companion object {
+        internal const val ACTION_OPEN_NOTES_OVERVIEW =
+            "com.philkes.notallyx.ACTION_OPEN_NOTES_OVERVIEW"
         const val EXTRA_FRAGMENT_TO_OPEN = "notallyx.intent.extra.FRAGMENT_TO_OPEN"
         const val EXTRA_SKIP_START_VIEW_ON_BACK = "notallyx.intent.extra.SKIP_START_VIEW_ON_BACK"
         private const val ACTION_SEARCH = 1001

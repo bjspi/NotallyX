@@ -20,6 +20,7 @@ import com.philkes.notallyx.data.dao.BaseNoteDao
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.presentation.activity.ConfigureWidgetActivity
+import com.philkes.notallyx.presentation.activity.main.MainActivity
 import com.philkes.notallyx.presentation.activity.note.EditActivity.Companion.EXTRA_SELECTED_BASE_NOTE
 import com.philkes.notallyx.presentation.activity.note.EditListActivity
 import com.philkes.notallyx.presentation.activity.note.EditNoteActivity
@@ -408,6 +409,21 @@ class WidgetProvider : AppWidgetProvider() {
                 ),
             )
             if (!open) return
+            setTextColor(R.id.WidgetNotePickerTitle, textColor)
+            setInt(R.id.WidgetOpenNotes, "setColorFilter", textColor)
+            setOnClickPendingIntent(
+                R.id.WidgetOpenNotes,
+                PendingIntent.getActivity(
+                    context,
+                    0,
+                    Intent(context, MainActivity::class.java)
+                        .setAction(MainActivity.ACTION_OPEN_NOTES_OVERVIEW)
+                        .addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                        ),
+                    PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
             val adapterIntent =
                 Intent(context, WidgetService::class.java)
                     .setAction(WidgetService.ACTION_NOTE_CHOICES)
