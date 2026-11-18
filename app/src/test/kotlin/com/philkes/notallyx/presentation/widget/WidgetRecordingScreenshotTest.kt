@@ -10,6 +10,7 @@ import android.widget.TextView
 import com.github.takahirom.roborazzi.RoborazziRule
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.philkes.notallyx.R
+import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.setNotePicker
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.setRecordingControls
 import com.philkes.notallyx.test.app
 import com.philkes.notallyx.utils.audio.AudioRecordService
@@ -77,6 +78,7 @@ class WidgetRecordingScreenshotTest {
 
         val title = widget.findViewById<TextView>(R.id.WidgetTitle)
         val changeNote = widget.findViewById<View>(R.id.ChangeNote)
+        val dropdown = widget.findViewById<View>(R.id.WidgetNoteDropdown)
         val voice = widget.findViewById<View>(R.id.WidgetVoice)
         assertTrue(title.layout.getEllipsisCount(0) > 0)
         assertEquals(changeNote.parent, title.parent)
@@ -84,7 +86,8 @@ class WidgetRecordingScreenshotTest {
         assertTrue(
             kotlin.math.abs(title.top + title.height / 2 - voice.top - voice.height / 2) <= 1
         )
-        assertTrue(title.right <= changeNote.left)
+        assertTrue(title.right <= dropdown.left)
+        assertTrue(dropdown.right <= changeNote.left)
     }
 
     private fun render(
@@ -98,6 +101,13 @@ class WidgetRecordingScreenshotTest {
             RemoteViews(app.packageName, R.layout.widget)
                 .apply {
                     setRecordingControls(activity, widgetId, noteId, recording)
+                    setNotePicker(
+                        activity,
+                        widgetId,
+                        noteId,
+                        open = false,
+                        textColor = TextView(activity).currentTextColor,
+                    )
                     setTextViewText(R.id.WidgetTitle, "A long example note title")
                     setViewVisibility(R.id.Empty, View.GONE)
                 }

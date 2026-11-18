@@ -34,6 +34,9 @@ import com.philkes.notallyx.utils.audio.AudioRecordService
 import com.philkes.notallyx.utils.embedIntentExtras
 import com.philkes.notallyx.utils.getOpenNotePendingIntent
 import com.philkes.notallyx.utils.isSystemInDarkMode
+import com.philkes.notallyx.utils.log
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -63,6 +66,62 @@ class WidgetProvider : AppWidgetProvider() {
             ACTION_OPEN_LIST -> openActivity(context, intent, EditListActivity::class.java)
             ACTION_CHECKED_CHANGED -> checkChanged(intent, context)
             ACTION_SELECT_NOTE -> openActivity(context, intent, ConfigureWidgetActivity::class.java)
+            ACTION_TOGGLE_NOTE_CHOICES,
+            ACTION_PICK_WIDGET_NOTE -> handleNotePicker(context, intent)
+        }
+    }
+
+    private fun handleNotePicker(context: Context, intent: Intent) {
+        val app = context.applicationContext as NotallyXApplication
+        val preferences = NotallyXPreferences.getInstance(app)
+        val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 0)
+        val currentNote = preferences.getWidgetData(widgetId)
+        if (currentNote == 0L || (preferences.isLockEnabled && app.locked.value)) return
+        if (
+            intent.action == ACTION_PICK_WIDGET_NOTE &&
+                intent.getLongExtra(EXTRA_PICKER_NOTE, 0) != currentNote
+        )
+            return
+
+        val pendingResult = goAsync()
+        MainScope().launch {
+            try {
+                val noteId =
+                    if (intent.action == ACTION_PICK_WIDGET_NOTE) {
+                        val choice = intent.getLongExtra(EXTRA_SELECTED_BASE_NOTE, 0)
+                        val type =
+                            NotallyDatabase.getDatabase(app)
+                                .value
+                                ?.getBaseNoteDao()
+                                ?.getWidgetNoteChoiceType(choice)
+                        if (
+                            preferences.getWidgetData(widgetId) != currentNote ||
+                                (preferences.isLockEnabled && app.locked.value)
+                        )
+                            return@launch
+                        openNotePickers.remove(widgetId)
+                        if (type == null) currentNote
+                        else {
+                            if (choice != currentNote)
+                                preferences.updateWidget(widgetId, choice, type)
+                            choice
+                        }
+                    } else {
+                        if (intent.getBooleanExtra(EXTRA_OPEN_NOTE_PICKER, false)) {
+                            openNotePickers[widgetId] = currentNote
+                        } else {
+                            openNotePickers.remove(widgetId)
+                        }
+                        currentNote
+                    }
+                renderWidget(app, AppWidgetManager.getInstance(app), widgetId, noteId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                app.log("WidgetProvider", throwable = e)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 
@@ -140,7 +199,10 @@ class WidgetProvider : AppWidgetProvider() {
         val app = context.applicationContext as Application
         val preferences = NotallyXPreferences.getInstance(app)
 
-        appWidgetIds.forEach { id -> preferences.deleteWidget(id) }
+        appWidgetIds.forEach { id ->
+            openNotePickers.remove(id)
+            preferences.deleteWidget(id)
+        }
     }
 
     override fun onUpdate(
@@ -165,12 +227,17 @@ class WidgetProvider : AppWidgetProvider() {
 
     companion object {
 
+        private val openNotePickers = ConcurrentHashMap<Int, Long>()
+
         fun updateWidgets(context: Context, noteIds: LongArray? = null, locked: Boolean) {
             val app = context.applicationContext as Application
             val preferences = NotallyXPreferences.getInstance(app)
 
             val manager = AppWidgetManager.getInstance(context)
-            val updatableWidgets = preferences.getUpdatableWidgets(noteIds)
+            val updatableWidgets =
+                preferences.getUpdatableWidgets().filter { (id, noteId) ->
+                    noteIds == null || noteId in noteIds || openNotePickers.containsKey(id)
+                }
 
             updatableWidgets.forEach { (id, noteId) ->
                 updateWidget(
@@ -190,101 +257,178 @@ class WidgetProvider : AppWidgetProvider() {
             noteId: Long,
             locked: Boolean = false,
         ) {
+            MainScope().launch { renderWidget(context, manager, id, noteId, locked) }
+        }
+
+        private suspend fun renderWidget(
+            context: ContextWrapper,
+            manager: AppWidgetManager,
+            id: Int,
+            noteId: Long,
+            locked: Boolean = false,
+        ) {
             // Widgets displaying the same note share the same factory since only the noteId is
             // embedded
             val intent = Intent(context, WidgetService::class.java)
             intent.putExtra(EXTRA_SELECTED_BASE_NOTE, noteId)
             intent.embedIntentExtras()
 
-            MainScope().launch {
-                val database = NotallyDatabase.getDatabase(context).value ?: return@launch
-                val header =
-                    withContext(Dispatchers.IO) {
-                        database.getBaseNoteDao().getWidgetNoteHeader(noteId)
-                    }
-                val app = context.applicationContext as NotallyXApplication
-                val preferences = NotallyXPreferences.getInstance(app)
-                if (preferences.getWidgetData(id) != noteId) return@launch
-                if (header == null) {
-                    preferences.deleteWidget(id)
+            val database = NotallyDatabase.getDatabase(context).value ?: return
+            val header =
+                withContext(Dispatchers.IO) {
+                    database.getBaseNoteDao().getWidgetNoteHeader(noteId)
                 }
-                if (!locked && !(preferences.isLockEnabled && app.locked.value)) {
-                    val selectNote =
-                        PendingIntent.getActivity(
+            val app = context.applicationContext as NotallyXApplication
+            val preferences = NotallyXPreferences.getInstance(app)
+            if (preferences.getWidgetData(id) != noteId) return
+            if (header == null) {
+                preferences.deleteWidget(id)
+            }
+            if (header == null || openNotePickers[id] != noteId) openNotePickers.remove(id)
+            if (!locked && !(preferences.isLockEnabled && app.locked.value)) {
+                val showNoteChoices = openNotePickers.containsKey(id)
+                val selectNote =
+                    PendingIntent.getActivity(
+                        context,
+                        id,
+                        createIntent(context, ConfigureWidgetActivity::class.java, noteId, id),
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    )
+                val view =
+                    RemoteViews(context.packageName, R.layout.widget).apply {
+                        setRemoteAdapter(R.id.ListView, intent)
+                        setViewVisibility(
+                            R.id.ListView,
+                            if (header == null || showNoteChoices) View.GONE else View.VISIBLE,
+                        )
+                        setViewVisibility(
+                            R.id.Empty,
+                            if (header == null) View.VISIBLE else View.GONE,
+                        )
+                        setOnClickPendingIntent(R.id.Empty, selectNote)
+                        setPendingIntentTemplate(
+                            R.id.ListView,
+                            Intent(context, WidgetProvider::class.java).asPendingIntent(context),
+                        )
+
+                        val (backgroundColor, controlsColor) =
+                            context.extractWidgetColors(
+                                header?.color ?: BaseNote.COLOR_DEFAULT,
+                                preferences,
+                            )
+                        setInt(R.id.Layout, "setBackgroundColor", backgroundColor)
+                        setTextColor(R.id.WidgetTitle, controlsColor)
+                        setInt(R.id.ChangeNote, "setColorFilter", controlsColor)
+                        setInt(R.id.WidgetVoice, "setColorFilter", controlsColor)
+                        setInt(R.id.WidgetDiscardRecording, "setColorFilter", controlsColor)
+                        setTextColor(R.id.WidgetRecordingTimer, controlsColor)
+                        if (header != null) {
+                            val openNote = context.getOpenNotePendingIntent(noteId, header.type)
+                            setOnClickPendingIntent(R.id.Layout, openNote)
+                            setOnClickPendingIntent(R.id.WidgetTitle, openNote)
+                            setTextViewText(R.id.WidgetTitle, header.title)
+                            setTextViewTextSize(
+                                R.id.WidgetTitle,
+                                TypedValue.COMPLEX_UNIT_SP,
+                                preferences.textSizeNoteEditor.value.displayTitleSize,
+                            )
+                        } else {
+                            setOnClickPendingIntent(R.id.Layout, selectNote)
+                            setOnClickPendingIntent(R.id.WidgetTitle, null)
+                            setTextViewText(R.id.WidgetTitle, "")
+                        }
+                        setOnClickPendingIntent(R.id.ChangeNote, selectNote)
+                        setNotePicker(
                             context,
                             id,
-                            createIntent(context, ConfigureWidgetActivity::class.java, noteId, id),
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                            noteId.takeIf { header != null },
+                            showNoteChoices,
+                            controlsColor,
                         )
-                    val view =
-                        RemoteViews(context.packageName, R.layout.widget).apply {
-                            setRemoteAdapter(R.id.ListView, intent)
-                            setViewVisibility(
-                                R.id.ListView,
-                                if (header == null) View.GONE else View.VISIBLE,
-                            )
-                            setViewVisibility(
-                                R.id.Empty,
-                                if (header == null) View.VISIBLE else View.GONE,
-                            )
-                            setOnClickPendingIntent(R.id.Empty, selectNote)
-                            setPendingIntentTemplate(
-                                R.id.ListView,
-                                Intent(context, WidgetProvider::class.java)
-                                    .asPendingIntent(context),
-                            )
-
-                            val (backgroundColor, controlsColor) =
-                                context.extractWidgetColors(
-                                    header?.color ?: BaseNote.COLOR_DEFAULT,
-                                    preferences,
-                                )
-                            setInt(R.id.Layout, "setBackgroundColor", backgroundColor)
-                            setTextColor(R.id.WidgetTitle, controlsColor)
-                            setInt(R.id.ChangeNote, "setColorFilter", controlsColor)
-                            setInt(R.id.WidgetVoice, "setColorFilter", controlsColor)
-                            setInt(R.id.WidgetDiscardRecording, "setColorFilter", controlsColor)
-                            setTextColor(R.id.WidgetRecordingTimer, controlsColor)
-                            if (header != null) {
-                                val openNote = context.getOpenNotePendingIntent(noteId, header.type)
-                                setOnClickPendingIntent(R.id.Layout, openNote)
-                                setOnClickPendingIntent(R.id.WidgetTitle, openNote)
-                                setTextViewText(R.id.WidgetTitle, header.title)
-                                setTextViewTextSize(
-                                    R.id.WidgetTitle,
-                                    TypedValue.COMPLEX_UNIT_SP,
-                                    preferences.textSizeNoteEditor.value.displayTitleSize,
-                                )
-                            } else {
-                                setOnClickPendingIntent(R.id.Layout, selectNote)
-                                setOnClickPendingIntent(R.id.WidgetTitle, null)
-                                setTextViewText(R.id.WidgetTitle, "")
-                            }
-                            setOnClickPendingIntent(R.id.ChangeNote, selectNote)
-                            setRecordingControls(context, id, noteId.takeIf { header != null })
-                        }
-                    manager.updateAppWidget(id, view)
-                    manager.notifyAppWidgetViewDataChanged(id, R.id.ListView)
-                } else {
-                    val view =
-                        RemoteViews(context.packageName, R.layout.widget_locked).apply {
-                            header?.let {
-                                val lockedPendingIntent =
-                                    context.getOpenNotePendingIntent(noteId, it.type)
-                                setOnClickPendingIntent(R.id.Layout, lockedPendingIntent)
-                                setOnClickPendingIntent(R.id.Text, lockedPendingIntent)
-                            }
-                            setTextViewCompoundDrawablesRelative(
-                                R.id.Text,
-                                0,
-                                R.drawable.lock_big,
-                                0,
-                                0,
-                            )
-                        }
-                    manager.updateAppWidget(id, view)
+                        setRecordingControls(context, id, noteId.takeIf { header != null })
+                    }
+                manager.updateAppWidget(id, view)
+                manager.notifyAppWidgetViewDataChanged(id, R.id.ListView)
+                if (showNoteChoices) {
+                    manager.notifyAppWidgetViewDataChanged(id, R.id.WidgetNoteChoices)
                 }
+            } else {
+                openNotePickers.remove(id)
+                val view =
+                    RemoteViews(context.packageName, R.layout.widget_locked).apply {
+                        header?.let {
+                            val lockedPendingIntent =
+                                context.getOpenNotePendingIntent(noteId, it.type)
+                            setOnClickPendingIntent(R.id.Layout, lockedPendingIntent)
+                            setOnClickPendingIntent(R.id.Text, lockedPendingIntent)
+                        }
+                        setTextViewCompoundDrawablesRelative(
+                            R.id.Text,
+                            0,
+                            R.drawable.lock_big,
+                            0,
+                            0,
+                        )
+                    }
+                manager.updateAppWidget(id, view)
             }
+        }
+
+        internal fun RemoteViews.setNotePicker(
+            context: Context,
+            widgetId: Int,
+            noteId: Long?,
+            open: Boolean,
+            textColor: Int,
+        ) {
+            setViewVisibility(
+                R.id.WidgetNoteDropdown,
+                if (noteId != null) View.VISIBLE else View.GONE,
+            )
+            setViewVisibility(R.id.WidgetNotePicker, if (open) View.VISIBLE else View.GONE)
+            if (noteId == null) return
+            setInt(R.id.WidgetNoteDropdown, "setColorFilter", textColor)
+            setContentDescription(
+                R.id.WidgetNoteDropdown,
+                context.getString(
+                    if (open) R.string.widget_close_note_picker else R.string.widget_switch_note
+                ),
+            )
+            setOnClickPendingIntent(
+                R.id.WidgetNoteDropdown,
+                PendingIntent.getBroadcast(
+                    context,
+                    widgetId,
+                    Intent(context, WidgetProvider::class.java)
+                        .setAction(ACTION_TOGGLE_NOTE_CHOICES)
+                        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                        .putExtra(EXTRA_OPEN_NOTE_PICKER, !open)
+                        .apply { embedIntentExtras() },
+                    PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+            if (!open) return
+            val adapterIntent =
+                Intent(context, WidgetService::class.java)
+                    .setAction(WidgetService.ACTION_NOTE_CHOICES)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                    .apply { embedIntentExtras() }
+            setRemoteAdapter(R.id.WidgetNoteChoices, adapterIntent)
+            setEmptyView(R.id.WidgetNoteChoices, R.id.WidgetNoNotes)
+            setTextColor(R.id.WidgetNoNotes, textColor)
+            setPendingIntentTemplate(
+                R.id.WidgetNoteChoices,
+                PendingIntent.getBroadcast(
+                    context,
+                    widgetId,
+                    Intent(context, WidgetProvider::class.java)
+                        .setAction(ACTION_PICK_WIDGET_NOTE)
+                        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                        .putExtra(EXTRA_PICKER_NOTE, noteId)
+                        .apply { embedIntentExtras() },
+                    PendingIntent.FLAG_MUTABLE,
+                ),
+            )
         }
 
         internal fun RemoteViews.setRecordingControls(
@@ -433,12 +577,17 @@ class WidgetProvider : AppWidgetProvider() {
 
         private const val EXTRA_MODIFIED_NOTES = "com.philkes.notallyx.EXTRA_MODIFIED_NOTES"
         private const val ACTION_NOTES_MODIFIED = "com.philkes.notallyx.ACTION_NOTE_MODIFIED"
+        private const val EXTRA_PICKER_NOTE = "com.philkes.notallyx.EXTRA_PICKER_NOTE"
+        private const val EXTRA_OPEN_NOTE_PICKER = "com.philkes.notallyx.EXTRA_OPEN_NOTE_PICKER"
 
         const val ACTION_OPEN_NOTE = "com.philkes.notallyx.ACTION_OPEN_NOTE"
         const val ACTION_OPEN_LIST = "com.philkes.notallyx.ACTION_OPEN_LIST"
         const val ACTION_SELECT_NOTE = "com.philkes.notallyx.ACTION_SELECT_NOTE"
 
         const val ACTION_CHECKED_CHANGED = "com.philkes.notallyx.ACTION_CHECKED_CHANGED"
+        internal const val ACTION_TOGGLE_NOTE_CHOICES =
+            "com.philkes.notallyx.ACTION_TOGGLE_NOTE_CHOICES"
+        internal const val ACTION_PICK_WIDGET_NOTE = "com.philkes.notallyx.ACTION_PICK_WIDGET_NOTE"
         const val EXTRA_POSITION = "notallyx.intent.extra.com.philkes.notallyx.EXTRA_POSITION"
     }
 }
