@@ -1,7 +1,6 @@
 package com.philkes.notallyx.presentation.viewmodel.edit
 
 import android.app.Application
-import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
 import android.text.Editable
@@ -15,6 +14,7 @@ import android.text.style.URLSpan
 import androidx.core.text.getSpans
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.NotallyDatabase
 import com.philkes.notallyx.data.dao.BaseNoteDao
@@ -31,7 +31,6 @@ import com.philkes.notallyx.data.model.SpanRepresentation
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.data.model.attachmentsDifferFrom
 import com.philkes.notallyx.data.model.deepCopy
-import com.philkes.notallyx.presentation.activity.note.reminders.ReminderReceiver
 import com.philkes.notallyx.presentation.activity.note.reminders.RemindersActivity.Companion.NEW_REMINDER_ID
 import com.philkes.notallyx.presentation.applySpans
 import com.philkes.notallyx.presentation.showToast
@@ -54,6 +53,7 @@ import com.philkes.notallyx.utils.getCurrentAudioDirectory
 import com.philkes.notallyx.utils.getCurrentFilesDirectory
 import com.philkes.notallyx.utils.getCurrentImagesDirectory
 import com.philkes.notallyx.utils.getTempAudioFile
+import com.philkes.notallyx.utils.onNoteSaved
 import com.philkes.notallyx.utils.scheduleReminder
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -335,24 +335,44 @@ open class NoteModel(
     suspend fun saveNote(checkBackupOnSave: Boolean = true): Long {
         return withContext(Dispatchers.IO) {
             val note = getBaseNote()
-            val id = baseNoteDao?.insertSafe(app, note) ?: throw DatabaseNotConnectedException()
-            if (checkBackupOnSave) {
-                checkBackupOnSave(note)
+            val original = originalNote
+            val db = database.value ?: throw DatabaseNotConnectedException()
+            val dao = db.getBaseNoteDao()
+            val saved = db.withTransaction {
+                val current = dao.get(note.id)
+                val updated =
+                    if (original != null && original.id == note.id && current != null) {
+                        val keepText =
+                            note.type == original.type &&
+                                note.body == original.body &&
+                                note.spans == original.spans
+                        val keepItems = note.type == original.type && note.items == original.items
+                        note.copy(
+                            title = if (note.title == original.title) current.title else note.title,
+                            body = if (keepText) current.body else note.body,
+                            spans = if (keepText) current.spans else note.spans,
+                            items = if (keepItems) current.items else note.items,
+                            modifiedTimestamp =
+                                maxOf(note.modifiedTimestamp, current.modifiedTimestamp),
+                        )
+                    } else note
+                updated.copy(id = dao.insertSafe(app, updated))
             }
-            if (!note.equalContents(originalNote)) {
-                app.sendBroadcast(
-                    Intent(app, ReminderReceiver::class.java).apply {
-                        action = ReminderReceiver.ACTION_UPDATE_NOTIFICATIONS
-                        putExtra(ReminderReceiver.EXTRA_NOTE_ID, id)
-                    }
-                )
-            }
+            app.onNoteSaved(
+                preferences,
+                saved,
+                original,
+                backupOnSave = checkBackupOnSave,
+                forceFullBackup = original?.attachmentsDifferFrom(saved) == true,
+            )
             originalNote = note.deepCopy()
-            return@withContext id
+            return@withContext saved.id
         }
     }
 
-    suspend fun checkBackupOnSave(note: BaseNote = getBaseNote()) {
+    suspend fun checkBackupOnSave() {
+        if (!preferences.backupOnSave.value) return
+        val note = withContext(Dispatchers.IO) { baseNoteDao?.get(id) } ?: getBaseNote()
         app.checkBackupOnSave(
             preferences,
             note = note,
@@ -549,7 +569,7 @@ open class NoteModel(
                 baseNoteDao?.get(id) ?: throw DatabaseNotConnectedException()
             }
         if (baseNote == null) return
-        originalNote = baseNote.deepCopy()
+        originalNote = originalNote?.copy(reminders = baseNote.reminders) ?: baseNote.deepCopy()
         reminders.value = baseNote.reminders
     }
 

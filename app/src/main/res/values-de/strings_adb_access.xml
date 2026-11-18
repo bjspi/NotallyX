@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="adb_access">ADB-Zugriff</string>
+    <string name="adb_access_description">Die ADB-Shell eines autorisierten Geräts kann alle Notizen und Anhänge lesen und vorhandene Notizen bearbeiten. Entsperre NotallyX zuerst, wenn die App-Sperre aktiv ist.</string>
+</resources>

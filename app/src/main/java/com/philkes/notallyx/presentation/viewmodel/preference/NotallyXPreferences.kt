@@ -217,6 +217,8 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
     val secureFlag =
         BooleanPreference("secureFlag", preferences, false, R.string.disallow_screenshots)
 
+    val adbAccess = BooleanPreference("adbAccess", preferences, false, R.string.adb_access)
+
     val dataInPublicFolder =
         BooleanPreference("dataOnExternalStorage", preferences, false, R.string.data_in_public)
 
@@ -312,6 +314,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
                 iv.key,
                 databaseEncryptionKey.key,
                 dataInPublicFolder.key,
+                adbAccess.key,
             )
 
     fun toJsonString(): String {
@@ -366,6 +369,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
                 maxLines,
                 maxTitle,
                 secureFlag,
+                adbAccess,
                 labelsHidden,
                 labelTagsHiddenInOverview,
                 maxLabels,

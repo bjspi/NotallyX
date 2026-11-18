@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.map
 
 data class NoteIdReminder(val id: Long, val reminders: List<Reminder>)
 
+data class NoteIndex(val id: Long, val type: Type, val folder: Folder, val title: String)
+
 data class NoteReminder(
     val id: Long,
     val title: String,
@@ -130,6 +132,9 @@ interface BaseNoteDao {
     @Query("SELECT * FROM BaseNote WHERE id IN (:ids)") fun getByIds(ids: LongArray): List<BaseNote>
 
     @Query("SELECT B.id FROM BaseNote B") fun getAllIds(): List<Long>
+
+    @Query("SELECT id, type, folder, title FROM BaseNote ORDER BY id")
+    fun getNoteIndex(): List<NoteIndex>
 
     @Query("SELECT * FROM BaseNote WHERE id = :id") fun get(id: Long): BaseNote?
 

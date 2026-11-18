@@ -857,6 +857,19 @@ class SettingsFragment : Fragment() {
                     }
                 }
             }
+            launch {
+                adbAccess.flow.collect { value ->
+                    binding.AdbAccess.setup(
+                        adbAccess,
+                        value,
+                        requireContext(),
+                        layoutInflater,
+                        R.string.adb_access_description,
+                    ) { newValue ->
+                        model.savePreference(adbAccess, newValue)
+                    }
+                }
+            }
         }
     }
 

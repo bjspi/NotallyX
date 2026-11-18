@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="adb_access">ADB access</string>
+    <string name="adb_access_description">The ADB shell of an authorized device can read all notes and attachments and edit existing notes. Unlock NotallyX first if app lock is enabled.</string>
+</resources>
