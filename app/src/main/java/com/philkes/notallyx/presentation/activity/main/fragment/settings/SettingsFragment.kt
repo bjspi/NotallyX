@@ -417,6 +417,20 @@ class SettingsFragment : Fragment() {
             }
 
             launch {
+                linedNotes.flow.collect { enabled ->
+                    binding.LinedNotes.setup(
+                        linedNotes,
+                        enabled,
+                        requireContext(),
+                        layoutInflater,
+                        R.string.lined_notes_description,
+                    ) { value ->
+                        model.savePreference(linedNotes, value)
+                    }
+                }
+            }
+
+            launch {
                 notesSorting.flow.collect { notesSort ->
                     binding.NotesSortOrder.setup(
                         notesSorting,

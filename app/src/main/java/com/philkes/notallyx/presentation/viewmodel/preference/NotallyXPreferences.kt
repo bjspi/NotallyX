@@ -47,6 +47,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
         FloatPreference("textSizeOverview", preferences, 16f, 12f, 32f, R.string.text_size_overview)
     val newNotesUseMarkdown =
         BooleanPreference("widgetMarkdown", preferences, false, R.string.new_notes_use_markdown)
+    val linedNotes = BooleanPreference("linedNotes", preferences, false, R.string.lined_notes)
     val dateFormatOverview =
         createEnumPreference(
             preferences,
@@ -361,6 +362,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
                 textSizeNoteEditor,
                 textSizeOverview,
                 newNotesUseMarkdown,
+                linedNotes,
                 dateFormatOverview,
                 timeFormatOverview,
                 dateFormatNoteView,

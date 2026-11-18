@@ -27,6 +27,7 @@
 
 ### Appearance
 
+- Turn on **Settings → Appearance → Lined notes** to add faint horizontal lines to the text in opened notes. The lines follow wrapped and blank lines in both the Markdown preview and the editor.
 - Select `dd.MM.yyyy` for dates such as `18.11.2026`. The overview and the opened-note view each have their own setting under **Settings → Appearance**.
 - Drag in the color wheel or along the hue and brightness sliders. The color swatch and hex value update as you drag.
 

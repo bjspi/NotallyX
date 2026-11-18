@@ -7,4 +7,6 @@
     <string name="note_format_markdown">Markdown</string>
     <string name="note_format_action">Notizformat: %1$s</string>
     <string name="note_save_failed">Die Notiz konnte nicht gespeichert werden.</string>
+    <string name="lined_notes">Linierte Notizen</string>
+    <string name="lined_notes_description">In geöffneten Textnotizen werden Linien unter den Textzeilen angezeigt.</string>
 </resources>

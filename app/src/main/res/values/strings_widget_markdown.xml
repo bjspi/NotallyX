@@ -7,4 +7,6 @@
     <string name="note_format_markdown">Markdown</string>
     <string name="note_format_action">Note format: %1$s</string>
     <string name="note_save_failed">Could not save the note.</string>
+    <string name="lined_notes">Lined notes</string>
+    <string name="lined_notes_description">Show horizontal lines under each line of text in an opened note.</string>
 </resources>

@@ -1,6 +1,9 @@
 package com.philkes.notallyx.presentation.activity.main
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
@@ -45,6 +48,7 @@ import com.philkes.notallyx.data.model.Reminder
 import com.philkes.notallyx.presentation.activity.main.MainActivity.Companion.EXTRA_FRAGMENT_TO_OPEN
 import com.philkes.notallyx.presentation.activity.note.EditActivity.Companion.EXTRA_SELECTED_BASE_NOTE
 import com.philkes.notallyx.presentation.activity.note.EditNoteActivity
+import com.philkes.notallyx.presentation.view.note.NoteLinesDrawable
 import com.philkes.notallyx.presentation.view.note.action.MoreNoteBottomSheet
 import com.philkes.notallyx.presentation.viewmodel.preference.NotesView
 import com.philkes.notallyx.test.FakeAndroidKeyStore
@@ -67,6 +71,8 @@ import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.Test
@@ -276,6 +282,93 @@ class ScreenshotTests {
             .children
             .first { it.contentDescription == description }
             .performClick()
+    }
+
+    @Test
+    fun linedNotesFollowWrappedAndBlankLinesInPreviewAndEditor() = runTest {
+        val paragraph =
+            "Every visible line follows the size and wrapping of the text. ".repeat(3).trim()
+        val source = "# A heading\n\n$paragraph\n\n- First item\n  - Nested item"
+        val noteId =
+            withContext(Dispatchers.IO) {
+                database
+                    .getBaseNoteDao()
+                    .insert(
+                        createBaseNote(
+                                title = "Lined note",
+                                body = source,
+                                timestamp = fixedTime.time,
+                            )
+                            .copy(format = NoteFormat.MARKDOWN)
+                    )
+            }
+        val originalPreference = preferences.linedNotes.value
+        preferences.linedNotes.save(false)
+        try {
+            val intent =
+                Intent(context, EditNoteActivity::class.java)
+                    .putExtra(EXTRA_SELECTED_BASE_NOTE, noteId)
+            ActivityScenario.launch<EditNoteActivity>(intent).use { scenario ->
+                waitUntilSucceeds {
+                    R.id.MarkdownPreview.byId()
+                        .check(
+                            matches(
+                                withText("A heading\n\n$paragraph\n\n• First item\n– Nested item")
+                            )
+                        )
+                }
+                scenario.onActivity {
+                    assertNull(it.findViewById<View>(R.id.MarkdownPreview).background)
+                }
+                preferences.linedNotes.save(true)
+                waitUntilSucceeds {
+                    R.id.MarkdownPreview.byId().check { view, error ->
+                        error?.let { throw it }
+                        assertLinesAtTextBaselines(view as TextView)
+                    }
+                }
+                onView(isRoot()).captureRoboImage("ScreenshotTests/linedNotes/preview.png")
+                scenario.onActivity { it.findViewById<View>(R.id.MarkdownPreview).performClick() }
+                waitUntilSucceeds {
+                    R.id.EnterBody.byId().check { view, error ->
+                        error?.let { throw it }
+                        assertLinesAtTextBaselines(view as TextView)
+                    }
+                }
+                onView(isRoot()).captureRoboImage("ScreenshotTests/linedNotes/editor.png")
+            }
+        } finally {
+            preferences.linedNotes.save(originalPreference)
+            withContext(Dispatchers.IO) { database.getBaseNoteDao().delete(noteId) }
+        }
+    }
+
+    private fun assertLinesAtTextBaselines(view: TextView) {
+        val lines = view.background
+        assertTrue(lines is NoteLinesDrawable)
+        val layout = checkNotNull(view.layout)
+        assertTrue(layout.lineCount > view.text.count { it == '\n' } + 1)
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        try {
+            lines.setBounds(0, 0, view.width, view.height)
+            lines.draw(Canvas(bitmap))
+            val x = view.compoundPaddingLeft + 2
+            for (index in 0 until layout.lineCount) {
+                val y =
+                    view.totalPaddingTop - view.scrollY +
+                        layout.getLineBaseline(index) +
+                        view.resources.displayMetrics.density
+                assertTrue(
+                    "Missing line at text row $index",
+                    (y.toInt() - 1..y.toInt() + 1).any {
+                        it in 0 until bitmap.height && Color.alpha(bitmap.getPixel(x, it)) > 0
+                    },
+                )
+            }
+            assertEquals(0, Color.alpha(bitmap.getPixel(x, view.paddingTop)))
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     @Test

@@ -29,12 +29,14 @@ import com.philkes.notallyx.databinding.RecyclerToggleBinding
 import com.philkes.notallyx.presentation.addIconButton
 import com.philkes.notallyx.presentation.dp
 import com.philkes.notallyx.presentation.hideKeyboard
+import com.philkes.notallyx.presentation.repeatOnLifecycleScope
 import com.philkes.notallyx.presentation.setCancelButton
 import com.philkes.notallyx.presentation.setControlsContrastColorForAllViews
 import com.philkes.notallyx.presentation.setOnNextAction
 import com.philkes.notallyx.presentation.showKeyboard
 import com.philkes.notallyx.presentation.showToast
 import com.philkes.notallyx.presentation.view.misc.highlightableview.HighlightSpan
+import com.philkes.notallyx.presentation.view.note.NoteLinesDrawable
 import com.philkes.notallyx.presentation.view.note.TextFormattingAdapter
 import com.philkes.notallyx.presentation.view.note.action.Action
 import com.philkes.notallyx.presentation.view.note.action.AddNoteBottomSheet
@@ -202,6 +204,18 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
                 if (binding.MarkdownPreview.isVisible) updateMarkdownPreview()
                 else updateSearchResults(search.query)
                 updateJumpButtonsVisibility()
+            }
+        }
+    }
+
+    override fun setupAdditionalListeners() {
+        super.setupAdditionalListeners()
+        repeatOnLifecycleScope {
+            preferences.linedNotes.flow.collect { enabled ->
+                binding.EnterBody.background =
+                    if (enabled) NoteLinesDrawable(binding.EnterBody) else null
+                binding.MarkdownPreview.background =
+                    if (enabled) NoteLinesDrawable(binding.MarkdownPreview) else null
             }
         }
     }
