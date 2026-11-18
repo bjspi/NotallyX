@@ -365,6 +365,7 @@ private val ISO_DATE_FORMAT = ThreadLocalDateFormat("yyyy-MM-dd", Locale.US)
 private val MM_DD_YY_FORMAT = ThreadLocalDateFormat("MM/dd/yy", Locale.US)
 private val DD_MM_YY_FORMAT = ThreadLocalDateFormat("dd/MM/yy", Locale.UK)
 private val DD_MM_YY_FORMAT_GER = ThreadLocalDateFormat("dd.MM.yy", Locale.GERMANY)
+private val DD_MM_YYYY_FORMAT_GER = ThreadLocalDateFormat("dd.MM.yyyy", Locale.GERMANY)
 private val FULL_FORMAT = ThreadLocalDateInstance(java.text.DateFormat.FULL)
 
 enum class DateFormat(val format: (Date) -> String, private val textHint: String = "") :
@@ -373,6 +374,7 @@ enum class DateFormat(val format: (Date) -> String, private val textHint: String
     FULL(FULL_FORMAT::format),
     RELATIVE({ PrettyTime().format(it) }),
     DD_MM_YY_GER(DD_MM_YY_FORMAT_GER::format, " (${DD_MM_YY_FORMAT_GER.toPattern()})"),
+    DD_MM_YYYY_GER(DD_MM_YYYY_FORMAT_GER::format, " (${DD_MM_YYYY_FORMAT_GER.toPattern()})"),
     DD_MM_YY(DD_MM_YY_FORMAT::format, " (${DD_MM_YY_FORMAT.toPattern()})"),
     MM_DD_YY(MM_DD_YY_FORMAT::format, " (${MM_DD_YY_FORMAT.toPattern()})"),
     SHORT_ISO(ISO_DATE_FORMAT::format, " (${ISO_DATE_FORMAT.toPattern()})");
