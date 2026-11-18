@@ -341,7 +341,12 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         } else {
             binding.EnterBody.setOnSelectionChange { _, _ -> }
         }
-        binding.ContentLayout.setOnClickListener { startBodyEditing() }
+        binding.ContentLayout.apply {
+            setOnClickListener(
+                if (isMarkdown) null else View.OnClickListener { startBodyEditing() }
+            )
+            isClickable = !isMarkdown
+        }
     }
 
     override fun initBottomMenu() {

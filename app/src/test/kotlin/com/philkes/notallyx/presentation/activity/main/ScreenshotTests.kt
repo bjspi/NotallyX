@@ -25,8 +25,10 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.action.ViewActions.typeText
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.Visibility
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.isRoot
+import androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -44,6 +46,7 @@ import com.philkes.notallyx.presentation.activity.main.MainActivity.Companion.EX
 import com.philkes.notallyx.presentation.activity.note.EditActivity.Companion.EXTRA_SELECTED_BASE_NOTE
 import com.philkes.notallyx.presentation.activity.note.EditNoteActivity
 import com.philkes.notallyx.presentation.view.note.action.MoreNoteBottomSheet
+import com.philkes.notallyx.presentation.viewmodel.preference.NotesView
 import com.philkes.notallyx.test.FakeAndroidKeyStore
 import com.philkes.notallyx.test.byContentDescription
 import com.philkes.notallyx.test.byId
@@ -63,10 +66,12 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.SQLiteMode
@@ -151,9 +156,14 @@ class ScreenshotTests {
         val source = "# A heading\n**Body**"
         val noteId =
             withContext(Dispatchers.IO) {
-                database.getBaseNoteDao().insert(createBaseNote(title = "Example", body = source))
+                database
+                    .getBaseNoteDao()
+                    .insert(
+                        createBaseNote(title = "Example", body = source, timestamp = fixedTime.time)
+                    )
             }
         preferences.newNotesUseMarkdown.save(true)
+        val initialNotesView = preferences.notesView.value
         try {
             val intent =
                 Intent(context, EditNoteActivity::class.java)
@@ -180,6 +190,11 @@ class ScreenshotTests {
                 }
                 onView(isRoot()).captureRoboImage("ScreenshotTests/markdownNote/preview.png")
                 scenario.onActivity { activity ->
+                    assertFalse(activity.findViewById<View>(R.id.ContentLayout).performClick())
+                    assertEquals(
+                        View.VISIBLE,
+                        activity.findViewById<View>(R.id.MarkdownPreview).visibility,
+                    )
                     activity.findViewById<View>(R.id.MarkdownPreview).performClick()
                     val insetsTarget = activity.findViewById<View>(R.id.main_content_layout)
                     val ime = WindowInsetsCompat.Type.ime()
@@ -207,9 +222,41 @@ class ScreenshotTests {
             assertEquals(NoteFormat.MARKDOWN, saved?.format)
             assertEquals(source, saved?.body)
 
-            ActivityScenario.launch(MainActivity::class.java).use {
-                waitUntilSucceeds { R.id.Note.byId().check(matches(withText("A heading\nBody"))) }
-                onView(isRoot()).captureRoboImage("ScreenshotTests/markdownNote/overview.png")
+            for (view in listOf(NotesView.LIST, NotesView.GRID)) {
+                preferences.notesView.save(view)
+                var openNote: Intent? = null
+                ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    waitUntilSucceeds {
+                        R.id.Note.byId().check(matches(withText("A heading\nBody")))
+                    }
+                    val screenshot = if (view == NotesView.GRID) "grid" else "overview"
+                    onView(isRoot())
+                        .captureRoboImage("ScreenshotTests/markdownNote/$screenshot.png")
+                    if (view == NotesView.GRID) {
+                        scenario.onActivity { activity ->
+                            activity
+                                .findViewById<RecyclerView>(R.id.MainListView)
+                                .children
+                                .first {
+                                    it.findViewById<TextView>(R.id.Title)?.text.toString() ==
+                                        "Example"
+                                }
+                                .performClick()
+                            openNote = shadowOf(activity).nextStartedActivityForResult.intent
+                        }
+                    }
+                }
+                if (view == NotesView.GRID) {
+                    val intent = checkNotNull(openNote)
+                    assertEquals(noteId, intent.getLongExtra(EXTRA_SELECTED_BASE_NOTE, -1))
+                    ActivityScenario.launch<EditNoteActivity>(intent).use {
+                        waitUntilSucceeds {
+                            R.id.MarkdownPreview.byId().check(matches(withText("A heading\nBody")))
+                            onView(withId(R.id.EnterBody))
+                                .check(matches(withEffectiveVisibility(Visibility.GONE)))
+                        }
+                    }
+                }
             }
 
             ActivityScenario.launch(EditNoteActivity::class.java).use { scenario ->
@@ -217,6 +264,7 @@ class ScreenshotTests {
                 scenario.onActivity { assertEquals(NoteFormat.MARKDOWN, it.notallyModel.format) }
             }
         } finally {
+            preferences.notesView.save(initialNotesView)
             preferences.newNotesUseMarkdown.save(false)
         }
     }
