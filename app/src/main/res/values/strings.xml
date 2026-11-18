@@ -96,6 +96,8 @@
     <string name="clear_formatting">Clear formatting</string>
     <string name="cleared_data">All Data has been cleared</string>
     <string name="color">Color</string>
+    <string name="color_hue">Hue</string>
+    <string name="color_brightness">Brightness</string>
     <string name="color_exists">This color already exists!</string>
     <string name="content_density">Content density</string>
     <string name="continue_">Continue</string>

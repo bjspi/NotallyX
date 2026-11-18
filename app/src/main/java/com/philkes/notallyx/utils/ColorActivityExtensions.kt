@@ -1,11 +1,18 @@
 package com.philkes.notallyx.utils
 
+import android.annotation.SuppressLint
+import android.graphics.Color as AndroidColor
+import android.graphics.drawable.GradientDrawable
+import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.GridLayoutManager
@@ -27,8 +34,12 @@ import com.philkes.notallyx.presentation.showToast
 import com.philkes.notallyx.presentation.view.main.ColorAdapter
 import com.philkes.notallyx.presentation.view.misc.ItemListener
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
+import com.skydoves.colorpickerview.ActionMode
 import com.skydoves.colorpickerview.ColorEnvelope
 import com.skydoves.colorpickerview.listeners.ColorEnvelopeListener
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 fun AppCompatActivity.showColorSelectDialog(
     colors: Set<ColorString>,
@@ -121,27 +132,69 @@ private fun AppCompatActivity.showEditColorDialog(
     deleteCallback: (colorToDelete: ColorString, newColor: ColorString) -> Unit,
 ) {
     val selectedColor = oldColor?.let { extractColor(it) } ?: extractColor(BaseNote.COLOR_DEFAULT)
-    var editTextChangedByUser = false
+    var updatingColor = false
+    var updatingHue = false
+    val hsv = FloatArray(3)
     var dialog: androidx.appcompat.app.AlertDialog? = null
     val binding =
         DialogColorPickerBinding.inflate(layoutInflater).apply {
+            BrightnessSlideBar.keepDragGestures()
+            ColorPicker.keepDragGestures()
+            HueSlider.keepDragGestures()
+            HueTrack.background =
+                GradientDrawable(
+                        GradientDrawable.Orientation.LEFT_RIGHT,
+                        (0..6)
+                            .map { AndroidColor.HSVToColor(floatArrayOf(it * 60f, 1f, 1f)) }
+                            .toIntArray(),
+                    )
+                    .apply { cornerRadius = 3.dp.toFloat() }
+            HueSlider.doOnLayout {
+                HueTrack.updateLayoutParams<FrameLayout.LayoutParams> {
+                    marginStart = HueSlider.trackSidePadding
+                    marginEnd = HueSlider.trackSidePadding
+                }
+            }
+            HueSlider.addOnChangeListener { _, hue, fromUser ->
+                if (fromUser) {
+                    AndroidColor.colorToHSV(ColorPicker.pureColor, hsv)
+                    val saturation = if (hsv[1] < 0.05f) 1f else hsv[1]
+                    val centerX = ColorPicker.width / 2f
+                    val centerY = ColorPicker.height / 2f
+                    val radius = minOf(centerX, centerY) * saturation
+                    val angle = Math.toRadians(hue.toDouble())
+                    updatingHue = true
+                    try {
+                        ColorPicker.setSelectorPoint(
+                            (centerX + cos(angle) * radius).roundToInt(),
+                            (centerY - sin(angle) * radius).roundToInt(),
+                        )
+                    } finally {
+                        updatingHue = false
+                    }
+                }
+            }
             BrightnessSlideBar.setSelectorDrawableRes(
                 com.skydoves.colorpickerview.R.drawable.colorpickerview_wheel
             )
             ColorPicker.apply {
+                actionMode = ActionMode.ALWAYS
                 BrightnessSlideBar.attachColorPickerView(ColorPicker)
                 attachBrightnessSlider(BrightnessSlideBar)
                 setInitialColor(selectedColor)
                 ColorPicker.postDelayed({ ColorPicker.selectByHsvColor(selectedColor) }, 100)
                 ColorCode.doAfterTextChanged { text ->
-                    val isValueChangedByUser = ColorCode.hasFocus()
                     val hexCode = text.toString()
-                    if (isValueChangedByUser && hexCode.length == 6) {
+                    if (!updatingColor && ColorCode.hasFocus() && hexCode.length == 6) {
+                        updatingColor = true
                         try {
                             val color = this@showEditColorDialog.extractColor("#$hexCode")
-                            editTextChangedByUser = true
                             ColorPicker.selectByHsvColor(color)
-                        } catch (e: Exception) {}
+                        } catch (e: IllegalArgumentException) {
+                            log("ColorPicker", throwable = e)
+                        } finally {
+                            updatingColor = false
+                        }
                     }
                 }
                 CopyCode.setOnClickListener { _ ->
@@ -217,11 +270,12 @@ private fun AppCompatActivity.showEditColorDialog(
                 },
                 applyToPositiveButton = { positiveButton ->
                     binding.apply {
-                        BrightnessSlideBar.setSelectorDrawableRes(
-                            com.skydoves.colorpickerview.R.drawable.colorpickerview_wheel
-                        )
                         ColorPicker.setColorListener(
                             ColorEnvelopeListener { color, _ ->
+                                if (!updatingHue) {
+                                    AndroidColor.colorToHSV(ColorPicker.pureColor, hsv)
+                                    HueSlider.value = hsv[0]
+                                }
                                 TileView.setPaintColor(color.color)
                                 val colorString = color.toColorString()
                                 val isSaveEnabled =
@@ -229,9 +283,15 @@ private fun AppCompatActivity.showEditColorDialog(
                                 positiveButton.isEnabled = isSaveEnabled
                                 ColorExistsText.visibility =
                                     if (isSaveEnabled) View.GONE else View.VISIBLE
-                                if (!editTextChangedByUser) {
-                                    ColorCode.setText(color.hexCode.argbToRgbString())
-                                } else editTextChangedByUser = false
+                                val hex = color.hexCode.argbToRgbString()
+                                if (!updatingColor && hex != ColorCode.text.toString()) {
+                                    updatingColor = true
+                                    try {
+                                        ColorCode.setText(hex)
+                                    } finally {
+                                        updatingColor = false
+                                    }
+                                }
                             }
                         )
                     }
@@ -272,6 +332,18 @@ private fun AppCompatActivity.showEditColorDialog(
         }
     }
     dialog.setOnDismissListener { job.cancel() }
+}
+
+@SuppressLint("ClickableViewAccessibility")
+private fun View.keepDragGestures() {
+    setOnTouchListener { view, event ->
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> view.parent?.requestDisallowInterceptTouchEvent(true)
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL -> view.parent?.requestDisallowInterceptTouchEvent(false)
+        }
+        false
+    }
 }
 
 private fun AppCompatActivity.showDeleteColorDialog(

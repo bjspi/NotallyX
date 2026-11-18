@@ -35,6 +35,27 @@
       android:layout_width="match_parent"
       android:layout_height="300dp" />
 
+    <FrameLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layoutDirection="ltr">
+      <View
+        android:id="@+id/HueTrack"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_gravity="center_vertical" />
+      <com.google.android.material.slider.Slider
+        android:id="@+id/HueSlider"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/color_hue"
+        android:valueFrom="0"
+        android:valueTo="360"
+        app:labelBehavior="gone"
+        app:trackColor="@android:color/transparent"
+        app:trackStopIndicatorSize="0dp" />
+    </FrameLayout>
+
     <LinearLayout
       android:layout_width="match_parent"
       android:layout_height="24dp"
@@ -51,6 +72,7 @@
         android:id="@+id/BrightnessSlideBar"
         android:layout_width="0dp"
         android:layout_height="match_parent"
+        android:contentDescription="@string/color_brightness"
         android:layout_weight="1"
         android:layout_marginStart="8dp"/>
     </LinearLayout>
