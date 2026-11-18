@@ -21,10 +21,9 @@ import com.philkes.notallyx.R
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.FileAttachment
 import com.philkes.notallyx.data.model.ListItem
-import com.philkes.notallyx.data.model.SpanRepresentation
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.databinding.RecyclerBaseNoteBinding
-import com.philkes.notallyx.presentation.applySpans
 import com.philkes.notallyx.presentation.bindLabels
 import com.philkes.notallyx.presentation.displayFormattedTimestamp
 import com.philkes.notallyx.presentation.dp
@@ -37,6 +36,7 @@ import com.philkes.notallyx.presentation.view.misc.ItemListener
 import com.philkes.notallyx.presentation.view.misc.highlightableview.HighlightableTextView
 import com.philkes.notallyx.presentation.view.misc.highlightableview.SEARCH_SNIPPET_ITEM_LINES
 import com.philkes.notallyx.presentation.view.note.listitem.init
+import com.philkes.notallyx.presentation.view.note.renderedBody
 import com.philkes.notallyx.presentation.viewmodel.preference.DateFormat
 import com.philkes.notallyx.presentation.viewmodel.preference.NotesSortBy
 import com.philkes.notallyx.presentation.viewmodel.preference.TimeFormat
@@ -44,6 +44,11 @@ import com.philkes.notallyx.presentation.viewmodel.preference.displayBodySize
 import com.philkes.notallyx.presentation.viewmodel.preference.displaySmallerSize
 import com.philkes.notallyx.presentation.viewmodel.preference.displayTitleSize
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class BaseNoteVHPreferences(
     val textSize: Float,
@@ -61,9 +66,11 @@ class BaseNoteVH(
     private val timeFormat: TimeFormat,
     private val preferences: BaseNoteVHPreferences,
     listener: ItemListener,
+    private val scope: CoroutineScope,
 ) : RecyclerView.ViewHolder(binding.root) {
 
     private var searchKeyword: String = ""
+    private var bodyRenderJob: Job? = null
 
     fun setSearchKeyword(keyword: String) {
         this.searchKeyword = keyword
@@ -106,6 +113,7 @@ class BaseNoteVH(
     }
 
     fun bind(baseNote: BaseNote, imageRoot: File?, checked: Boolean, sortBy: NotesSortBy) {
+        cancelBodyRendering()
         updateCheck(checked, baseNote.color)
 
         when (baseNote.type) {
@@ -177,30 +185,37 @@ class BaseNoteVH(
 
     private fun bindNote(baseNote: BaseNote, keyword: String) {
         binding.LinearLayout.visibility = GONE
-        if (keyword.isBlank()) {
-            bindNote(baseNote.body, baseNote.spans, baseNote.title.isEmpty())
-            return
-        }
         binding.Note.apply {
-            val snippet = extractSearchSnippet(baseNote.body, keyword)
-            if (snippet == null) {
-                bindNote(baseNote.body, baseNote.spans, baseNote.title.isEmpty())
+            text = null
+            val titleEmpty = baseNote.title.isEmpty()
+            maxLines =
+                if (titleEmpty) preferences.maxLines.coerceAtLeast(1) else preferences.maxLines
+            isVisible = if (preferences.maxLines < 1) titleEmpty else baseNote.body.isNotEmpty()
+            if (baseNote.format == NoteFormat.MARKDOWN) {
+                if (isVisible || keyword.isNotBlank()) {
+                    bodyRenderJob = scope.launch {
+                        val rendered = withContext(Dispatchers.IO) { baseNote.renderedBody() }
+                        bindBody(rendered, rendered, keyword)
+                    }
+                }
             } else {
-                showSearchSnippet(snippet)
+                bindBody(baseNote.renderedBody(), baseNote.body, keyword)
             }
         }
     }
 
-    private fun bindNote(body: String, spans: List<SpanRepresentation>, isTitleEmpty: Boolean) {
-        binding.Note.apply {
-            text = body.applySpans(spans)
-            if (preferences.maxLines < 1) {
-                isVisible = isTitleEmpty
-                maxLines = if (isTitleEmpty) 1 else preferences.maxLines
-            } else {
-                isVisible = body.isNotEmpty()
-            }
-        }
+    private fun HighlightableTextView.bindBody(
+        rendered: CharSequence,
+        searchable: CharSequence,
+        keyword: String,
+    ) {
+        val snippet = if (keyword.isNotBlank()) extractSearchSnippet(searchable, keyword) else null
+        if (snippet != null) showSearchSnippet(snippet) else text = rendered
+    }
+
+    fun cancelBodyRendering() {
+        bodyRenderJob?.cancel()
+        bodyRenderJob = null
     }
 
     /** Shows a snippet of ListItems around the ListItem that contains keyword */

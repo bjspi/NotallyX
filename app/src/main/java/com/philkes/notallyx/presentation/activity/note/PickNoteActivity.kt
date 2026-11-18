@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
@@ -59,6 +60,7 @@ open class PickNoteActivity : LockedActivity<ActivityPickNoteBinding>(), ItemLis
                     ),
                     application.getCurrentImagesDirectory(),
                     this@PickNoteActivity,
+                    lifecycleScope,
                 )
             }
 

@@ -8,6 +8,8 @@ import android.widget.TextView
 import androidx.annotation.IdRes
 import androidx.annotation.StringRes
 import androidx.core.view.GravityCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 import androidx.core.widget.NestedScrollView
 import androidx.drawerlayout.widget.DrawerLayout
@@ -145,7 +147,7 @@ class ScreenshotTests {
     }
 
     @Test
-    fun markdownNoteUsesTheSavedFormatAndRendersAReadOnlyPreview() = runTest {
+    fun markdownNoteUsesTheSavedFormatAndRendersUntilEditing() = runTest {
         val source = "# A heading\n\n**Body**"
         val noteId =
             withContext(Dispatchers.IO) {
@@ -171,19 +173,47 @@ class ScreenshotTests {
                 onView(withText(R.string.note_format_markdown)).inRoot(isDialog()).perform(click())
                 scenario.onActivity { activity ->
                     assertEquals(NoteFormat.MARKDOWN, activity.notallyModel.format)
-                    clickNoteAction(activity, R.string.read_only)
                 }
                 waitUntilSucceeds {
+                    R.id.MarkdownPreview.byId().check(matches(isDisplayed()))
                     R.id.MarkdownPreview.byId().check(matches(withText("A heading\nBody")))
                 }
                 onView(isRoot()).captureRoboImage("ScreenshotTests/markdownNote/preview.png")
+                scenario.onActivity { activity ->
+                    activity.findViewById<View>(R.id.MarkdownPreview).performClick()
+                    val insetsTarget = activity.findViewById<View>(R.id.main_content_layout)
+                    val ime = WindowInsetsCompat.Type.ime()
+                    val insets = WindowInsetsCompat.Builder()
+                    ViewCompat.dispatchApplyWindowInsets(
+                        insetsTarget,
+                        insets.setVisible(ime, true).build(),
+                    )
+                }
+                R.id.EnterBody.byId().check(matches(isDisplayed()))
+                R.id.EnterBody.byId().check(matches(withText(source)))
+                scenario.onActivity { activity ->
+                    val insetsTarget = activity.findViewById<View>(R.id.main_content_layout)
+                    ViewCompat.dispatchApplyWindowInsets(
+                        insetsTarget,
+                        WindowInsetsCompat.Builder().build(),
+                    )
+                }
+                waitUntilSucceeds {
+                    R.id.MarkdownPreview.byId().check(matches(isDisplayed()))
+                    R.id.MarkdownPreview.byId().check(matches(withText("A heading\nBody")))
+                }
             }
             val saved = withContext(Dispatchers.IO) { database.getBaseNoteDao().get(noteId) }
             assertEquals(NoteFormat.MARKDOWN, saved?.format)
             assertEquals(source, saved?.body)
 
+            ActivityScenario.launch(MainActivity::class.java).use {
+                waitUntilSucceeds { R.id.Note.byId().check(matches(withText("A heading\nBody"))) }
+                onView(isRoot()).captureRoboImage("ScreenshotTests/markdownNote/overview.png")
+            }
+
             ActivityScenario.launch(EditNoteActivity::class.java).use { scenario ->
-                waitUntilSucceeds { R.id.EnterBody.byId().check(matches(isDisplayed())) }
+                waitUntilSucceeds { R.id.MarkdownPreview.byId().check(matches(isDisplayed())) }
                 scenario.onActivity { assertEquals(NoteFormat.MARKDOWN, it.notallyModel.format) }
             }
         } finally {

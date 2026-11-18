@@ -3,12 +3,13 @@ package com.philkes.notallyx.presentation.activity.note
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.style.URLSpan
 import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
@@ -33,10 +34,12 @@ import com.philkes.notallyx.presentation.setControlsContrastColorForAllViews
 import com.philkes.notallyx.presentation.setOnNextAction
 import com.philkes.notallyx.presentation.showKeyboard
 import com.philkes.notallyx.presentation.showToast
+import com.philkes.notallyx.presentation.view.misc.highlightableview.HighlightSpan
 import com.philkes.notallyx.presentation.view.note.TextFormattingAdapter
 import com.philkes.notallyx.presentation.view.note.action.Action
 import com.philkes.notallyx.presentation.view.note.action.AddNoteBottomSheet
 import com.philkes.notallyx.presentation.view.note.renderMarkdown
+import com.philkes.notallyx.presentation.withAlpha
 import com.philkes.notallyx.utils.LinkMovementMethod
 import com.philkes.notallyx.utils.copyToClipBoard
 import com.philkes.notallyx.utils.findAllOccurrences
@@ -55,16 +58,25 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
 
     private var textFormattingAdapter: TextFormattingAdapter? = null
 
-    private var searchResultIndices: List<Pair<Int, Int>>? = null
+    private var searchResultIndices: List<Pair<Int, Int>> = emptyList()
     private var markdownPreviewJob: Job? = null
+    private var markdownPreviewSource: String? = null
+    private var renderedMarkdown: CharSequence = ""
+    private var editingMarkdown = false
+    private var keyboardVisible = false
+
+    private val isMarkdown: Boolean
+        get() = notallyModel.format == NoteFormat.MARKDOWN
 
     private val canFormatText: Boolean
         get() = canEdit && notallyModel.format == NoteFormat.TEXT
 
     override fun configureUI() {
-        binding.EnterTitle.setOnNextAction { binding.EnterBody.requestFocus() }
+        binding.EnterTitle.setOnNextAction {
+            if (isMarkdown) startBodyEditing() else binding.EnterBody.requestFocus()
+        }
 
-        if (notallyModel.isNewNote) {
+        if (notallyModel.isNewNote && !isMarkdown) {
             binding.EnterBody.requestFocus()
         }
     }
@@ -73,11 +85,40 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         super.toggleCanEdit(mode)
         textFormatMenu.isVisible = canFormatText
         when {
-            mode == NoteViewMode.EDIT -> showKeyboard(binding.EnterBody)
+            mode == NoteViewMode.EDIT && !isMarkdown -> showKeyboard(binding.EnterBody)
+            mode == NoteViewMode.EDIT -> Unit
             binding.EnterBody.isFocused -> hideKeyboard(binding.EnterBody)
         }
+        if (!canEdit) editingMarkdown = false
         binding.EnterBody.setCanEdit(mode == NoteViewMode.EDIT)
         setupEditor()
+        updateMarkdownPreview()
+    }
+
+    override fun onKeyboardVisibilityChanged(visible: Boolean) {
+        val dismissed = keyboardVisible && !visible
+        keyboardVisible = visible
+        if (dismissed) stopMarkdownEditing()
+    }
+
+    private fun startBodyEditing() {
+        if (isMarkdown) {
+            if (!canEdit) return
+            editingMarkdown = true
+            updateMarkdownPreview()
+        }
+        binding.EnterBody.apply {
+            requestFocus()
+            if (canEdit) {
+                setSelection(length())
+                showKeyboard(this)
+            }
+        }
+    }
+
+    private fun stopMarkdownEditing() {
+        if (!editingMarkdown) return
+        editingMarkdown = false
         updateMarkdownPreview()
     }
 
@@ -91,46 +132,88 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
 
     override suspend fun highlightSearchResults(search: String): Int {
         binding.EnterBody.clearHighlights()
-        if (search.isEmpty()) {
-            return 0
+        val inPreview = binding.MarkdownPreview.isVisible
+        val text = if (inPreview) renderedMarkdown.toString() else notallyModel.body.toString()
+        searchResultIndices =
+            if (search.isEmpty()) emptyList()
+            else withContext(Dispatchers.Default) { text.findAllOccurrences(search) }
+        if (inPreview) {
+            highlightMarkdownPreview(-1)
+        } else {
+            binding.EnterBody.highlight(searchResultIndices, -1)
         }
-        val text = notallyModel.body.toString()
-        val occurrences = withContext(Dispatchers.Default) { text.findAllOccurrences(search) }
-        binding.EnterBody.highlight(occurrences, -1)
-        searchResultIndices = occurrences
-        return searchResultIndices!!.size
+        return searchResultIndices.size
     }
 
     override fun selectSearchResult(resultPos: Int) {
+        if (binding.MarkdownPreview.isVisible) {
+            highlightMarkdownPreview(resultPos)
+            searchResultIndices.getOrNull(resultPos)?.let { (start, _) ->
+                binding.MarkdownPreview.layout?.let { layout ->
+                    binding.ScrollView.scrollTo(
+                        0,
+                        binding.MarkdownPreview.top +
+                            layout.getLineTop(layout.getLineForOffset(start)),
+                    )
+                }
+            }
+            return
+        }
         if (resultPos < 0) {
             binding.EnterBody.unselectHighlight()
             return
         }
-        searchResultIndices?.get(resultPos)?.let { (startIdx, endIdx) ->
+        searchResultIndices.getOrNull(resultPos)?.let { (startIdx, endIdx) ->
             val selectedLineTop = binding.EnterBody.select(startIdx, endIdx)
             selectedLineTop?.let { binding.ScrollView.scrollTo(0, it) }
         }
     }
 
+    private fun highlightMarkdownPreview(selectedIndex: Int) {
+        binding.MarkdownPreview.apply {
+            text =
+                SpannableString(renderedMarkdown).apply {
+                    searchResultIndices.take(1000).forEachIndexed { index, (start, end) ->
+                        if (end <= length) {
+                            val color =
+                                if (index == selectedIndex) highlightColor
+                                else highlightColor.withAlpha(0.1f)
+                            setSpan(
+                                HighlightSpan(color),
+                                start,
+                                end,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
     override fun setupListeners() {
         super.setupListeners()
+        binding.EnterBody.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) stopMarkdownEditing()
+        }
         binding.EnterBody.initHistory(changeHistory) { text ->
             val textChanged = !notallyModel.body.toString().contentEquals(text)
             notallyModel.body = text
             if (textChanged) {
-                updateSearchResults(search.query)
+                if (binding.MarkdownPreview.isVisible) updateMarkdownPreview()
+                else updateSearchResults(search.query)
                 updateJumpButtonsVisibility()
             }
         }
     }
 
     override fun setStateFromModel(savedInstanceState: Bundle?) {
+        editingMarkdown = false
         super.setStateFromModel(savedInstanceState)
         updateEditText()
         savedInstanceState?.let {
             val selectionStart = it.getInt(EXTRA_SELECTION_START, -1)
             val selectionEnd = it.getInt(EXTRA_SELECTION_END, -1)
-            if (selectionStart > -1 && binding.EnterBody.isVisible) {
+            if (selectionStart > -1 && !isMarkdown) {
                 binding.EnterBody.postOnAnimation {
                     binding.EnterBody.focusAndSelect(selectionStart, selectionEnd)
                 }
@@ -181,6 +264,7 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
                         showToast(R.string.note_save_failed)
                     }
                     initBottomMenu()
+                    editingMarkdown = false
                     setupEditor()
                     updateMarkdownPreview()
                 }
@@ -196,42 +280,39 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
                 NoteFormat.MARKDOWN -> R.string.note_format_markdown
             }
 
-    override fun startSearch() {
-        super.startSearch()
-        updateMarkdownPreview()
-    }
-
-    override fun endSearch() {
-        super.endSearch()
-        updateMarkdownPreview()
-    }
-
     private fun updateMarkdownPreview() {
-        val showPreview =
-            notallyModel.format == NoteFormat.MARKDOWN &&
-                !canEdit &&
-                !binding.EnterSearchKeyword.isVisible
-        markdownPreviewJob?.cancel()
+        val showPreview = isMarkdown && !editingMarkdown
+        val visibilityChanged = binding.MarkdownPreview.isVisible != showPreview
         binding.EnterBody.isVisible = !showPreview
         binding.MarkdownPreview.isVisible = showPreview
         if (showPreview) {
             val source = notallyModel.body.toString()
+            if (source == markdownPreviewSource && !visibilityChanged) return
+            markdownPreviewJob?.cancel()
+            markdownPreviewSource = source
+            renderedMarkdown = ""
+            searchResultIndices = emptyList()
             binding.MarkdownPreview.text = null
             markdownPreviewJob = lifecycleScope.launch {
-                binding.MarkdownPreview.text =
-                    withContext(Dispatchers.Default) { renderMarkdown(source) }
-                binding.MarkdownPreview.movementMethod =
-                    android.text.method.LinkMovementMethod.getInstance()
-                binding.MarkdownPreview.doOnLayout {
-                    if (it.isVisible) updateJumpButtonsVisibility((it as TextView).lineCount)
-                }
+                renderedMarkdown = withContext(Dispatchers.IO) { renderMarkdown(source) }
+                binding.MarkdownPreview.text = renderedMarkdown
+                if (isInSearchMode()) updateSearchResults(search.query)
+                binding.MarkdownPreview.doOnLayout { updateJumpButtonsVisibility() }
             }
-        } else {
-            binding.MarkdownPreview.text = null
+        } else if (visibilityChanged) {
+            markdownPreviewJob?.cancel()
+            if (isInSearchMode()) updateSearchResults(search.query)
+            binding.EnterBody.doOnLayout { updateJumpButtonsVisibility() }
         }
     }
 
     private fun setupEditor() {
+        binding.MarkdownPreview.apply {
+            setTextIsSelectable(!canEdit)
+            movementMethod =
+                if (canEdit) null else android.text.method.LinkMovementMethod.getInstance()
+            setOnClickListener(if (canEdit) View.OnClickListener { startBodyEditing() } else null)
+        }
         setupMovementMethod()
         binding.EnterBody.customSelectionActionModeCallback =
             if (canFormatText) {
@@ -260,15 +341,7 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         } else {
             binding.EnterBody.setOnSelectionChange { _, _ -> }
         }
-        binding.ContentLayout.setOnClickListener {
-            binding.EnterBody.apply {
-                requestFocus()
-                if (canEdit) {
-                    setSelection(length())
-                    showKeyboard(this)
-                }
-            }
-        }
+        binding.ContentLayout.setOnClickListener { startBodyEditing() }
     }
 
     override fun initBottomMenu() {

@@ -309,9 +309,12 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
                         navBarBottom, // Space for BottomAppBar + nav bar
                 )
             }
+            onKeyboardVisibilityChanged(insets.isVisible(WindowInsetsCompat.Type.ime()))
             insets
         }
     }
+
+    protected open fun onKeyboardVisibilityChanged(visible: Boolean) {}
 
     open fun toggleCanEdit(mode: NoteViewMode) {
         binding.EnterTitle.apply {
@@ -505,7 +508,10 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
             val show =
                 when (notallyModel.type) {
                     Type.NOTE ->
-                        (manualSize ?: binding.EnterBody.lineCount) >
+                        (manualSize
+                            ?: if (binding.MarkdownPreview.isVisible) {
+                                binding.MarkdownPreview.lineCount
+                            } else binding.EnterBody.lineCount) >
                             (if (isInLandscapeMode) 30 else 75)
                     Type.LIST ->
                         (manualSize ?: notallyModel.items.size) >

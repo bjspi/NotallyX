@@ -33,17 +33,18 @@ class HighlightableTextView(context: Context, attrs: AttributeSet?) :
 
     fun highlight(startIdx: Int, endIdx: Int) {
         this.text =
-            SpannableString(this.text.toString()).apply {
+            SpannableString(this.text).apply {
                 setSpan(HighlightSpan(highlightColor), startIdx, endIdx, SPAN_EXCLUSIVE_EXCLUSIVE)
             }
     }
 
     fun showSearchSnippet(snippet: Snippet) {
-        val displayedText = buildString {
-            if (!snippet.includesFirstLine) append(ELLIPSED_TEXT)
-            append(snippet.text)
-            if (!snippet.includesLastLine) append(ELLIPSED_TEXT)
-        }
+        val displayedText =
+            TextUtils.concat(
+                if (snippet.includesFirstLine) "" else ELLIPSED_TEXT,
+                snippet.text,
+                if (snippet.includesLastLine) "" else ELLIPSED_TEXT,
+            )
         val displayKeywordIdx =
             when {
                 !snippet.includesFirstLine -> snippet.keywordIdx + ELLIPSED_TEXT.length
@@ -61,7 +62,7 @@ class HighlightableTextView(context: Context, attrs: AttributeSet?) :
      * @return Snippet's text, keyword idx in the Snippet, whether or not the snippet includes the
      *   first line of the text.
      */
-    fun extractSearchSnippet(text: String, keyword: String): Snippet? {
+    fun extractSearchSnippet(text: CharSequence, keyword: String): Snippet? {
         val keywordIndex = text.indexOf(keyword, ignoreCase = true)
         if (keywordIndex == -1) {
             return null
@@ -71,7 +72,7 @@ class HighlightableTextView(context: Context, attrs: AttributeSet?) :
         }
         val start = (keywordIndex - SEARCH_SNIPPET_SIZE).coerceAtLeast(0)
         val end = (keywordIndex + keyword.length + SEARCH_SNIPPET_SIZE).coerceAtMost(text.lastIndex)
-        val snippetText = text.substring(start, end + 1)
+        val snippetText = text.subSequence(start, end + 1)
         val keywordIdxInSnippet = snippetText.indexOf(keyword, ignoreCase = true)
         return Snippet(snippetText, keyword, keywordIdxInSnippet, start == 0, end == text.lastIndex)
     }
@@ -93,7 +94,7 @@ class HighlightableTextView(context: Context, attrs: AttributeSet?) :
 }
 
 data class Snippet(
-    val text: String,
+    val text: CharSequence,
     val keyword: String,
     val keywordIdx: Int,
     val includesFirstLine: Boolean,

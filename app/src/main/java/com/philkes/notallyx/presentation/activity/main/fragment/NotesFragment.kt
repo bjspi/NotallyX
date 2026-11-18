@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -278,6 +279,7 @@ abstract class NotesFragment : Fragment(), ItemListener {
                     ),
                     model.imageRoot,
                     this@NotesFragment,
+                    viewLifecycleOwner.lifecycleScope,
                 )
             }
 

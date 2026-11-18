@@ -20,6 +20,7 @@ import com.philkes.notallyx.presentation.viewmodel.preference.NotesSort
 import com.philkes.notallyx.presentation.viewmodel.preference.NotesSortBy
 import com.philkes.notallyx.presentation.viewmodel.preference.TimeFormat
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
 
 class BaseNoteAdapter(
     private val selectedIds: Set<Long>,
@@ -29,6 +30,7 @@ class BaseNoteAdapter(
     private val preferences: BaseNoteVHPreferences,
     private val imageRoot: File?,
     private val listener: ItemListener,
+    private val scope: CoroutineScope,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private var searchKeyword: String = ""
@@ -115,9 +117,14 @@ class BaseNoteAdapter(
             }
             else -> {
                 val binding = RecyclerBaseNoteBinding.inflate(inflater, parent, false)
-                BaseNoteVH(binding, dateFormat, timeFormat, preferences, listener)
+                BaseNoteVH(binding, dateFormat, timeFormat, preferences, listener, scope)
             }
         }
+    }
+
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        (holder as? BaseNoteVH)?.cancelBodyRendering()
+        super.onViewRecycled(holder)
     }
 
     fun setNotesSort(notesSort: NotesSort) {
