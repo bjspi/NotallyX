@@ -4,7 +4,7 @@ import android.app.Activity
 import android.graphics.Typeface
 import android.os.Parcel
 import android.text.Spanned
-import android.text.style.BulletSpan
+import android.text.style.LeadingMarginSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
@@ -79,9 +79,13 @@ class WidgetNoteFormattingTest {
                     """
                     # Markdown
 
+                    ## Details
+
                     **Bold**, *italic*, ~~old~~ and `code`.
 
                     - A bullet
+                      - Nested item
+                        - Deeper item
 
                     3. Third
                     4. Fourth
@@ -105,23 +109,41 @@ class WidgetNoteFormattingTest {
             preferences.widgetMarkdown.save(true)
             val widget = render(activity, note)
             val body = widget.findViewById<TextView>(R.id.Note).text as Spanned
-            assertTrue(body.startsWith("Markdown\nBold, italic, old and code."))
+            assertTrue(body.startsWith("Markdown\nDetails\nBold, italic, old and code."))
             assertTrue(body.contains("3. Third\n4. Fourth"))
             assertTrue(body.contains("x\n\u00a0\u00a0y"))
             assertTrue(body.endsWith("Image caption"))
-            assertTrue(body.getSpans(0, body.length, RelativeSizeSpan::class.java).isNotEmpty())
-            assertTrue(body.getSpans(0, body.length, BulletSpan::class.java).isNotEmpty())
+            assertTrue(headingSize(body, "Markdown") > headingSize(body, "Details"))
+            assertTrue(indent(body, "– Nested item") > indent(body, "• A bullet"))
+            assertTrue(indent(body, "– Deeper item") > indent(body, "– Nested item"))
             assertTrue(body.getSpans(0, body.length, StrikethroughSpan::class.java).isNotEmpty())
             assertTrue(body.getSpans(0, body.length, TypefaceSpan::class.java).size == 2)
 
             val root = FrameLayout(activity)
-            root.addView(widget, FrameLayout.LayoutParams(240, 248))
+            root.addView(widget, FrameLayout.LayoutParams(240, 280))
             activity.setContentView(root)
             ShadowLooper.idleMainLooper()
             widget.captureRoboImage("WidgetNoteFormattingTest/markdown.png")
         } finally {
             preferences.widgetMarkdown.save(false)
         }
+    }
+
+    private fun headingSize(body: Spanned, heading: String): Float {
+        val start = body.indexOf(heading)
+        return body
+            .getSpans(start, start + heading.length, RelativeSizeSpan::class.java)
+            .single()
+            .sizeChange
+    }
+
+    private fun indent(body: Spanned, item: String): Int {
+        val start = body.indexOf(item)
+        assertTrue("Missing list item: $item", start >= 0)
+        return body
+            .getSpans(start, start + item.length, LeadingMarginSpan.Standard::class.java)
+            .single()
+            .getLeadingMargin(true)
     }
 
     private fun hostActivity(): Activity =

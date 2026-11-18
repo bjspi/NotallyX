@@ -15,7 +15,6 @@ import com.philkes.notallyx.data.model.ListItem
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
 import com.philkes.notallyx.presentation.viewmodel.preference.displayBodySize
-import com.philkes.notallyx.presentation.viewmodel.preference.displayTitleSize
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.extractWidgetColors
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetCheckedChangeIntent
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetOpenNoteIntent
@@ -43,8 +42,8 @@ class WidgetFactory(
         val copy = baseNote
         return if (copy != null) {
             when (copy.type) {
-                Type.NOTE -> 1
-                Type.LIST -> 1 + copy.items.size
+                Type.NOTE -> if (copy.body.isEmpty()) 0 else 1
+                Type.LIST -> copy.items.size
             }
         } else 0
     }
@@ -60,21 +59,13 @@ class WidgetFactory(
 
         return when (copy.type) {
             Type.NOTE -> getNoteView(copy)
-            Type.LIST -> {
-                if (position > 0) {
-                    getListItemView(position - 1, copy)
-                } else getListHeaderView(copy)
-            }
+            Type.LIST -> getListItemView(position, copy)
         }
     }
 
     private fun getNoteView(note: BaseNote): RemoteViews {
         return RemoteViews(app.packageName, R.layout.widget_note).apply {
-            val textSize = preferences.textSizeNoteEditor.value
-            setTextViewTextSize(R.id.Title, TypedValue.COMPLEX_UNIT_SP, textSize.displayTitleSize)
-            setTextViewText(R.id.Title, note.title)
-
-            val bodyTextSize = textSize.displayBodySize
+            val bodyTextSize = preferences.textSizeNoteEditor.value.displayBodySize
 
             setTextViewTextSize(R.id.Note, TypedValue.COMPLEX_UNIT_SP, bodyTextSize)
             if (note.body.isNotEmpty()) {
@@ -85,24 +76,7 @@ class WidgetFactory(
             setOnClickFillInIntent(R.id.LinearLayout, getWidgetOpenNoteIntent(note.type, note.id))
 
             val (_, controlsColor) = app.extractWidgetColors(note.color, preferences)
-            setTextViewsTextColor(listOf(R.id.Title, R.id.Note), controlsColor)
-        }
-    }
-
-    private fun getListHeaderView(list: BaseNote): RemoteViews {
-        return RemoteViews(app.packageName, R.layout.widget_list_header).apply {
-            setTextViewTextSize(
-                R.id.Title,
-                TypedValue.COMPLEX_UNIT_SP,
-                preferences.textSizeNoteEditor.value.displayTitleSize,
-            )
-            setTextViewText(R.id.Title, list.title)
-            val openNoteWidgetIntent = getWidgetOpenNoteIntent(list.type, list.id)
-            setOnClickFillInIntent(R.id.LinearLayout, openNoteWidgetIntent)
-            setOnClickFillInIntent(R.id.Title, openNoteWidgetIntent)
-
-            val (_, controlsColor) = app.extractWidgetColors(list.color, preferences)
-            setTextViewsTextColor(listOf(R.id.Title), controlsColor)
+            setTextColor(R.id.Note, controlsColor)
         }
     }
 
@@ -141,7 +115,6 @@ class WidgetFactory(
                 )
                 setImageViewColor(R.id.CheckBox, controlsColor)
             }
-            setTextViewsTextColor(listOf(R.id.Title), controlsColor)
         }
     }
 
@@ -162,10 +135,6 @@ class WidgetFactory(
             },
         )
         setInt(textViewId, "setTextColor", fontColor)
-    }
-
-    private fun RemoteViews.setTextViewsTextColor(viewIds: List<Int>, color: Int) {
-        viewIds.forEach { viewId -> setInt(viewId, "setTextColor", color) }
     }
 
     private fun RemoteViews.setImageViewColor(viewId: Int, color: Int) {

@@ -11,6 +11,7 @@ import androidx.sqlite.db.SupportSQLiteQuery
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.model.Audio
 import com.philkes.notallyx.data.model.BaseNote
+import com.philkes.notallyx.data.model.ColorString
 import com.philkes.notallyx.data.model.FileAttachment
 import com.philkes.notallyx.data.model.Folder
 import com.philkes.notallyx.data.model.LabelsInBaseNote
@@ -27,6 +28,8 @@ import kotlinx.coroutines.flow.map
 data class NoteIdReminder(val id: Long, val reminders: List<Reminder>)
 
 data class NoteIndex(val id: Long, val type: Type, val folder: Folder, val title: String)
+
+data class WidgetNoteHeader(val title: String, val color: ColorString, val type: Type)
 
 data class NoteReminder(
     val id: Long,
@@ -167,6 +170,9 @@ interface BaseNoteDao {
     suspend fun getAllWithRemindersOrPinned(): List<BaseNote>
 
     @Query("SELECT color FROM BaseNote WHERE id = :id ") fun getColorOfNote(id: Long): String?
+
+    @Query("SELECT title, color, type FROM BaseNote WHERE id = :id")
+    fun getWidgetNoteHeader(id: Long): WidgetNoteHeader?
 
     @Query(
         "SELECT * FROM BaseNote WHERE reminders IS NOT NULL AND reminders != '[]' AND folder = 'NOTES'"

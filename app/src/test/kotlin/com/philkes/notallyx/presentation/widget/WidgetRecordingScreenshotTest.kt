@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.Chronometer
 import android.widget.FrameLayout
 import android.widget.RemoteViews
+import android.widget.TextView
 import com.github.takahirom.roborazzi.RoborazziRule
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.philkes.notallyx.R
@@ -13,6 +14,7 @@ import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.setReco
 import com.philkes.notallyx.test.app
 import com.philkes.notallyx.utils.audio.AudioRecordService
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,17 +60,37 @@ class WidgetRecordingScreenshotTest {
         capture(activity, otherWidget, "idle")
     }
 
+    @Test
+    fun longTitleSharesTheControlsRowInANarrowWidget() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        activity.setTheme(R.style.AppTheme)
+        val widget = render(activity, widgetId = 1, noteId = 10, recording = null)
+        capture(activity, widget, "narrow", width = 132)
+
+        val title = widget.findViewById<TextView>(R.id.WidgetTitle)
+        val changeNote = widget.findViewById<View>(R.id.ChangeNote)
+        val voice = widget.findViewById<View>(R.id.WidgetVoice)
+        assertTrue(title.layout.getEllipsisCount(0) > 0)
+        assertEquals(changeNote.parent, title.parent)
+        assertEquals(voice.parent, title.parent)
+        assertTrue(
+            kotlin.math.abs(title.top + title.height / 2 - voice.top - voice.height / 2) <= 1
+        )
+        assertTrue(title.right <= changeNote.left)
+    }
+
     private fun render(
         activity: Activity,
         widgetId: Int,
         noteId: Long,
-        recording: AudioRecordService.WidgetRecording,
+        recording: AudioRecordService.WidgetRecording?,
     ): FrameLayout {
         val parent = FrameLayout(activity)
         val view =
             RemoteViews(app.packageName, R.layout.widget)
                 .apply {
                     setRecordingControls(activity, widgetId, noteId, recording)
+                    setTextViewText(R.id.WidgetTitle, "A long example note title")
                     setViewVisibility(R.id.Empty, View.GONE)
                 }
                 .apply(activity, parent)
@@ -76,9 +98,9 @@ class WidgetRecordingScreenshotTest {
         return parent
     }
 
-    private fun capture(activity: Activity, widget: View, name: String) {
+    private fun capture(activity: Activity, widget: View, name: String, width: Int = 240) {
         val root = FrameLayout(activity)
-        root.addView(widget, FrameLayout.LayoutParams(240, 100))
+        root.addView(widget, FrameLayout.LayoutParams(width, 100))
         activity.setContentView(root)
         ShadowLooper.idleMainLooper()
         widget.captureRoboImage("WidgetRecordingScreenshotTest/$name.png")

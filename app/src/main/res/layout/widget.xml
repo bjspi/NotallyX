@@ -15,9 +15,21 @@
         android:orientation="horizontal"
         android:visibility="gone">
 
+        <TextView
+            android:id="@+id/WidgetTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:paddingStart="8dp"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?android:textColorPrimary" />
+
         <ImageButton
             android:id="@+id/ChangeNote"
-            android:layout_width="48dp"
+            android:layout_width="40dp"
             android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/select_note"
@@ -25,7 +37,7 @@
 
         <ImageButton
             android:id="@+id/WidgetVoice"
-            android:layout_width="48dp"
+            android:layout_width="40dp"
             android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/widget_voice_plus"
@@ -51,7 +63,8 @@
             android:id="@+id/ListView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:divider="@null" />
+            android:divider="@null"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/Empty"
