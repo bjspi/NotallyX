@@ -32,6 +32,8 @@
 - Select `dd.MM.yyyy` for dates such as `18.11.2026`. The overview and the opened-note view each have their own setting under **Settings → Appearance**.
 - Drag in the color wheel or along the hue and brightness sliders. The color swatch and hex value update as you drag.
 
+---
+
 <div style="display: flex; justify-content: space-between; width: 100%;">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Image 6" style="width: 32%;"/>
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Image 2" style="width: 32%;"/>
