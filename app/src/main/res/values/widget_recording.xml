@@ -8,4 +8,6 @@
     <string name="widget_voice_plus">Voice+ · Record audio</string>
     <string name="widget_recording_busy">A NotallyX recording is already open.</string>
     <string name="widget_recording_failed">Could not record or save the audio.</string>
+    <string name="widget_discard_recording_title">Discard recording</string>
+    <string name="widget_discard_recording_message">Discard the current recording?</string>
 </resources>

@@ -3,4 +3,6 @@
     <string name="widget_voice_plus">Voice+ · Audio aufnehmen</string>
     <string name="widget_recording_busy">In NotallyX ist bereits eine Aufnahme geöffnet.</string>
     <string name="widget_recording_failed">Die Audioaufnahme konnte nicht gestartet oder gespeichert werden.</string>
+    <string name="widget_discard_recording_title">Aufnahme verwerfen</string>
+    <string name="widget_discard_recording_message">Möchtest du die laufende Aufnahme verwerfen?</string>
 </resources>

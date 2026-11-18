@@ -50,6 +50,8 @@ class AudioRecordService : Service() {
         when (intent?.action) {
             ACTION_START_WIDGET -> startWidgetRecording(intent)
             ACTION_STOP_WIDGET -> stopWidgetRecording(intent.getLongExtra(EXTRA_STARTED_AT, -1))
+            ACTION_DISCARD_WIDGET ->
+                discardWidgetRecording(intent.getLongExtra(EXTRA_STARTED_AT, -1))
             else -> {
                 if (recorder == null && widgetRecording == null) {
                     prepareEditorRecording()
@@ -57,6 +59,14 @@ class AudioRecordService : Service() {
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun discardWidgetRecording(startedAt: Long) {
+        if (widgetRecording?.startedAt == startedAt && status.value == RECORDING) {
+            finishWidgetRecording()
+        } else if (widgetRecording == null && recorder == null) {
+            stopSelf()
+        }
     }
 
     private fun prepareEditorRecording() {
@@ -257,6 +267,7 @@ class AudioRecordService : Service() {
 
     private fun finishWidgetRecording() {
         releaseRecorder()
+        status.value = Status.READY
         widgetFile?.delete()
         widgetFile = null
         clearWidgetRecording()
@@ -293,6 +304,8 @@ class AudioRecordService : Service() {
         private const val TAG = "AudioRecordService"
         private const val ACTION_START_WIDGET = "com.philkes.notallyx.action.START_WIDGET_RECORDING"
         private const val ACTION_STOP_WIDGET = "com.philkes.notallyx.action.STOP_WIDGET_RECORDING"
+        private const val ACTION_DISCARD_WIDGET =
+            "com.philkes.notallyx.action.DISCARD_WIDGET_RECORDING"
         private const val EXTRA_RESULT = "recordingResult"
         private const val EXTRA_STARTED_AT = "recordingStartedAt"
         private const val RECORDING_NOTIFICATION_ID = 10101
@@ -304,6 +317,12 @@ class AudioRecordService : Service() {
 
         internal var widgetRecording: WidgetRecording? = null
             private set
+
+        internal fun widgetDiscardIntent(context: Context, startedAt: Long): Intent =
+            Intent(context, AudioRecordService::class.java).apply {
+                action = ACTION_DISCARD_WIDGET
+                putExtra(EXTRA_STARTED_AT, startedAt)
+            }
 
         internal fun widgetStartIntent(
             context: Context,

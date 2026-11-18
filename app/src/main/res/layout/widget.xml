@@ -42,6 +42,15 @@
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/widget_voice_plus"
             android:src="@drawable/record_audio" />
+
+        <ImageButton
+            android:id="@+id/WidgetDiscardRecording"
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/widget_discard_recording_title"
+            android:src="@drawable/delete"
+            android:visibility="gone" />
     </LinearLayout>
 
     <Chronometer

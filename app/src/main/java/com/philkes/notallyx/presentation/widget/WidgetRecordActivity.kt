@@ -1,8 +1,12 @@
 package com.philkes.notallyx.presentation.widget
 
 import android.Manifest
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withResumed
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.philkes.notallyx.NotallyXApplication
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.NotallyDatabase
@@ -41,6 +46,7 @@ class WidgetRecordActivity : ComponentActivity() {
 
     override fun onPostResume() {
         super.onPostResume()
+        if (intent.action == ACTION_CONFIRM_DISCARD) return
         if (
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
@@ -56,6 +62,35 @@ class WidgetRecordActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(FrameLayout(this))
         permissionRequested = savedInstanceState?.getBoolean(REQUESTED) == true
+        if (intent.action == ACTION_CONFIRM_DISCARD) confirmDiscard()
+    }
+
+    private fun confirmDiscard() {
+        val startedAt = intent.getLongExtra(EXTRA_STARTED_AT, -1)
+        val widgetId =
+            intent.getIntExtra(
+                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID,
+            )
+        val recording = AudioRecordService.widgetRecording
+        if (recording?.startedAt != startedAt || recording.widgetId != widgetId) {
+            finish()
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.widget_discard_recording_title)
+            .setMessage(R.string.widget_discard_recording_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.discard) { _, _ ->
+                try {
+                    startService(AudioRecordService.widgetDiscardIntent(this, startedAt))
+                } catch (e: IllegalStateException) {
+                    log(TAG, throwable = e)
+                    fail()
+                }
+            }
+            .setOnDismissListener { finish() }
+            .show()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -135,5 +170,23 @@ class WidgetRecordActivity : ComponentActivity() {
     companion object {
         private const val TAG = "WidgetRecordActivity"
         private const val REQUESTED = "requested"
+        private const val ACTION_CONFIRM_DISCARD = "com.philkes.notallyx.action.CONFIRM_DISCARD"
+        private const val EXTRA_STARTED_AT = "recordingStartedAt"
+
+        internal fun discardConfirmationIntent(
+            context: Context,
+            recording: AudioRecordService.WidgetRecording,
+        ): PendingIntent =
+            PendingIntent.getActivity(
+                context,
+                recording.widgetId,
+                Intent(context, WidgetRecordActivity::class.java).apply {
+                    action = ACTION_CONFIRM_DISCARD
+                    data = Uri.fromParts("notallyx-recording", recording.startedAt.toString(), null)
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, recording.widgetId)
+                    putExtra(EXTRA_STARTED_AT, recording.startedAt)
+                },
+                PendingIntent.FLAG_IMMUTABLE,
+            )
     }
 }

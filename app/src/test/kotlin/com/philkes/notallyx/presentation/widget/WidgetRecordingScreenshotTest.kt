@@ -46,6 +46,14 @@ class WidgetRecordingScreenshotTest {
             sourceWidget.findViewById<View>(R.id.WidgetVoice).contentDescription,
         )
         assertEquals(
+            View.VISIBLE,
+            sourceWidget.findViewById<View>(R.id.WidgetDiscardRecording).visibility,
+        )
+        assertEquals(
+            View.GONE,
+            otherWidget.findViewById<View>(R.id.WidgetDiscardRecording).visibility,
+        )
+        assertEquals(
             View.GONE,
             otherWidget.findViewById<View>(R.id.WidgetRecordingTimer).visibility,
         )

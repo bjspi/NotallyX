@@ -243,6 +243,7 @@ class WidgetProvider : AppWidgetProvider() {
                             setTextColor(R.id.WidgetTitle, controlsColor)
                             setInt(R.id.ChangeNote, "setColorFilter", controlsColor)
                             setInt(R.id.WidgetVoice, "setColorFilter", controlsColor)
+                            setInt(R.id.WidgetDiscardRecording, "setColorFilter", controlsColor)
                             setTextColor(R.id.WidgetRecordingTimer, controlsColor)
                             if (header != null) {
                                 val openNote = context.getOpenNotePendingIntent(noteId, header.type)
@@ -300,6 +301,14 @@ class WidgetProvider : AppWidgetProvider() {
             setViewVisibility(
                 R.id.WidgetRecordingTimer,
                 if (recording == null) View.GONE else View.VISIBLE,
+            )
+            setViewVisibility(
+                R.id.WidgetDiscardRecording,
+                if (recording == null) View.GONE else View.VISIBLE,
+            )
+            setOnClickPendingIntent(
+                R.id.WidgetDiscardRecording,
+                recording?.let { WidgetRecordActivity.discardConfirmationIntent(context, it) },
             )
             if (recording != null) {
                 setChronometer(R.id.WidgetRecordingTimer, recording.startedAt, null, true)
