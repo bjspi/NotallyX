@@ -137,7 +137,7 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
 
     protected open suspend fun checkSave() {
         if (notallyModel.isEmpty()) {
-            notallyModel.deleteBaseNote(checkAutoSave = false)
+            notallyModel.deleteBaseNote(checkAutoSave = false, preserveExternalChanges = true)
         } else if (notallyModel.isModified()) {
             saveNote()
         } else {

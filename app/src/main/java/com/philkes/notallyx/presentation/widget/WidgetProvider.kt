@@ -9,6 +9,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import com.philkes.notallyx.NotallyXApplication
@@ -27,6 +28,7 @@ import com.philkes.notallyx.presentation.view.note.listitem.findChildrenPosition
 import com.philkes.notallyx.presentation.view.note.listitem.findParentPosition
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
 import com.philkes.notallyx.presentation.viewmodel.preference.Theme
+import com.philkes.notallyx.utils.audio.AudioRecordService
 import com.philkes.notallyx.utils.embedIntentExtras
 import com.philkes.notallyx.utils.getOpenNotePendingIntent
 import com.philkes.notallyx.utils.isSystemInDarkMode
@@ -149,7 +151,7 @@ class WidgetProvider : AppWidgetProvider() {
 
         appWidgetIds.forEach { id ->
             val noteId = preferences.getWidgetData(id)
-            val noteType = preferences.getWidgetNoteType(id) ?: return
+            val noteType = preferences.getWidgetNoteType(id)
             updateWidget(
                 app,
                 appWidgetManager,
@@ -194,72 +196,53 @@ class WidgetProvider : AppWidgetProvider() {
             // embedded
             val intent = Intent(context, WidgetService::class.java)
             intent.putExtra(EXTRA_SELECTED_BASE_NOTE, noteId)
-            intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
             intent.embedIntentExtras()
 
             MainScope().launch {
                 val database = NotallyDatabase.getDatabase(context).value ?: return@launch
                 val color =
                     withContext(Dispatchers.IO) { database.getBaseNoteDao().getColorOfNote(noteId) }
+                val app = context.applicationContext as NotallyXApplication
+                val preferences = NotallyXPreferences.getInstance(app)
+                if (preferences.getWidgetData(id) != noteId) return@launch
                 if (color == null) {
-                    val app = context.applicationContext as Application
-                    val preferences = NotallyXPreferences.getInstance(app)
                     preferences.deleteWidget(id)
-                    val view =
-                        RemoteViews(context.packageName, R.layout.widget).apply {
-                            setRemoteAdapter(R.id.ListView, intent)
-                            setEmptyView(R.id.ListView, R.id.Empty)
-                            setOnClickPendingIntent(
-                                R.id.Empty,
-                                Intent(context, WidgetProvider::class.java)
-                                    .apply {
-                                        action = ACTION_SELECT_NOTE
-                                        data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
-                                    }
-                                    .asPendingIntent(context),
-                            )
-                            setPendingIntentTemplate(
-                                R.id.ListView,
-                                Intent(context, WidgetProvider::class.java)
-                                    .asPendingIntent(context),
-                            )
-                        }
-                    manager.updateAppWidget(id, view)
-                    manager.notifyAppWidgetViewDataChanged(id, R.id.ListView)
-                    return@launch
                 }
-                if (!locked) {
+                if (!locked && !(preferences.isLockEnabled && app.locked.value)) {
+                    val selectNote =
+                        PendingIntent.getActivity(
+                            context,
+                            id,
+                            createIntent(context, ConfigureWidgetActivity::class.java, noteId, id),
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                        )
                     val view =
                         RemoteViews(context.packageName, R.layout.widget).apply {
                             setRemoteAdapter(R.id.ListView, intent)
                             setEmptyView(R.id.ListView, R.id.Empty)
-                            setOnClickPendingIntent(
-                                R.id.Empty,
-                                Intent(context, WidgetProvider::class.java)
-                                    .apply {
-                                        action = ACTION_SELECT_NOTE
-                                        data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
-                                    }
-                                    .asPendingIntent(context),
-                            )
+                            setOnClickPendingIntent(R.id.Empty, selectNote)
                             setPendingIntentTemplate(
                                 R.id.ListView,
                                 Intent(context, WidgetProvider::class.java)
                                     .asPendingIntent(context),
                             )
 
-                            noteType?.let {
+                            if (color != null && noteType != null) {
                                 setOnClickPendingIntent(
                                     R.id.Layout,
                                     Intent(context, WidgetProvider::class.java)
                                         .setOpenNoteIntent(noteType, noteId)
                                         .asPendingIntent(context),
                                 )
+                                val (backgroundColor, controlsColor) =
+                                    context.extractWidgetColors(color, preferences)
+                                setInt(R.id.Layout, "setBackgroundColor", backgroundColor)
+                                setInt(R.id.ChangeNote, "setColorFilter", controlsColor)
+                                setInt(R.id.WidgetVoice, "setColorFilter", controlsColor)
+                                setTextColor(R.id.WidgetRecordingTimer, controlsColor)
                             }
-                            val preferences = NotallyXPreferences.getInstance(context)
-                            val (backgroundColor, _) =
-                                context.extractWidgetColors(color, preferences)
-                            setInt(R.id.Layout, "setBackgroundColor", backgroundColor)
+                            setOnClickPendingIntent(R.id.ChangeNote, selectNote)
+                            setRecordingControls(context, id, noteId.takeIf { color != null })
                         }
                     manager.updateAppWidget(id, view)
                     manager.notifyAppWidgetViewDataChanged(id, R.id.ListView)
@@ -283,6 +266,63 @@ class WidgetProvider : AppWidgetProvider() {
                     manager.updateAppWidget(id, view)
                 }
             }
+        }
+
+        internal fun RemoteViews.setRecordingControls(
+            context: Context,
+            widgetId: Int,
+            noteId: Long?,
+            session: AudioRecordService.WidgetRecording? = AudioRecordService.widgetRecording,
+        ) {
+            val recording = session?.takeIf { it.widgetId == widgetId }
+            setViewVisibility(
+                R.id.WidgetControls,
+                if (noteId == null && recording == null) View.GONE else View.VISIBLE,
+            )
+            setViewVisibility(
+                R.id.WidgetRecordingTimer,
+                if (recording == null) View.GONE else View.VISIBLE,
+            )
+            if (recording != null) {
+                setChronometer(R.id.WidgetRecordingTimer, recording.startedAt, null, true)
+                setImageViewResource(R.id.WidgetVoice, R.drawable.widget_stop_recording)
+                setContentDescription(R.id.WidgetVoice, context.getString(R.string.stop))
+                setOnClickPendingIntent(R.id.WidgetVoice, recording.stopIntent(context))
+            } else {
+                setChronometer(R.id.WidgetRecordingTimer, 0, null, false)
+                setImageViewResource(R.id.WidgetVoice, R.drawable.record_audio)
+                setContentDescription(
+                    R.id.WidgetVoice,
+                    context.getString(R.string.widget_voice_plus),
+                )
+                if (noteId != null) {
+                    setOnClickPendingIntent(
+                        R.id.WidgetVoice,
+                        PendingIntent.getActivity(
+                            context,
+                            widgetId,
+                            Intent(context, WidgetRecordActivity::class.java).apply {
+                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                                putExtra(EXTRA_SELECTED_BASE_NOTE, noteId)
+                            },
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                        ),
+                    )
+                }
+            }
+        }
+
+        internal fun refreshRecordingWidget(context: Context, widgetId: Int) {
+            val app = context.applicationContext as NotallyXApplication
+            val preferences = NotallyXPreferences.getInstance(app)
+            updateWidget(
+                app,
+                AppWidgetManager.getInstance(app),
+                widgetId,
+                preferences.getWidgetData(widgetId),
+                preferences.getWidgetNoteType(widgetId),
+                locked = preferences.isLockEnabled && app.locked.value,
+            )
         }
 
         fun getWidgetOpenNoteIntent(noteType: Type, noteId: Long): Intent {
@@ -363,12 +403,6 @@ class WidgetProvider : AppWidgetProvider() {
                 action = ACTION_NOTES_MODIFIED
                 putExtra(EXTRA_MODIFIED_NOTES, ids)
                 context.sendBroadcast(this)
-            }
-
-        fun getWidgetSelectNoteIntent(id: Int) =
-            Intent(ACTION_SELECT_NOTE).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
-                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
             }
 
         private const val EXTRA_MODIFIED_NOTES = "com.philkes.notallyx.EXTRA_MODIFIED_NOTES"

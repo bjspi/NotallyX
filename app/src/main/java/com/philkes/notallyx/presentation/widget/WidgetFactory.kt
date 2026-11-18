@@ -19,14 +19,12 @@ import com.philkes.notallyx.presentation.viewmodel.preference.displayTitleSize
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.extractWidgetColors
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetCheckedChangeIntent
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetOpenNoteIntent
-import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetSelectNoteIntent
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 class WidgetFactory(
     private val app: NotallyXApplication,
     private val id: Long,
-    private val widgetId: Int,
 ) : RemoteViewsService.RemoteViewsFactory, KoinComponent {
 
     private var baseNote: BaseNote? = null
@@ -84,12 +82,10 @@ class WidgetFactory(
                 setViewVisibility(R.id.Note, View.VISIBLE)
             } else setViewVisibility(R.id.Note, View.GONE)
 
-            setOnClickFillInIntent(R.id.ChangeNote, getWidgetSelectNoteIntent(widgetId))
             setOnClickFillInIntent(R.id.LinearLayout, getWidgetOpenNoteIntent(note.type, note.id))
 
             val (_, controlsColor) = app.extractWidgetColors(note.color, preferences)
             setTextViewsTextColor(listOf(R.id.Title, R.id.Note), controlsColor)
-            setImageViewColor(R.id.ChangeNote, controlsColor)
         }
     }
 
@@ -101,14 +97,12 @@ class WidgetFactory(
                 preferences.textSizeNoteEditor.value.displayTitleSize,
             )
             setTextViewText(R.id.Title, list.title)
-            setOnClickFillInIntent(R.id.ChangeNote, getWidgetSelectNoteIntent(widgetId))
             val openNoteWidgetIntent = getWidgetOpenNoteIntent(list.type, list.id)
             setOnClickFillInIntent(R.id.LinearLayout, openNoteWidgetIntent)
             setOnClickFillInIntent(R.id.Title, openNoteWidgetIntent)
 
             val (_, controlsColor) = app.extractWidgetColors(list.color, preferences)
             setTextViewsTextColor(listOf(R.id.Title), controlsColor)
-            setImageViewColor(R.id.ChangeNote, controlsColor)
         }
     }
 

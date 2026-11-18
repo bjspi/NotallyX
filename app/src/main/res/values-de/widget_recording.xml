@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_voice_plus">Voice+ · Audio aufnehmen</string>
+    <string name="widget_recording_busy">In NotallyX ist bereits eine Aufnahme geöffnet.</string>
+    <string name="widget_recording_failed">Die Audioaufnahme konnte nicht gestartet oder gespeichert werden.</string>
+</resources>

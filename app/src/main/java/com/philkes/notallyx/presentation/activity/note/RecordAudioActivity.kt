@@ -16,6 +16,7 @@ import com.philkes.notallyx.databinding.ActivityRecordAudioBinding
 import com.philkes.notallyx.presentation.activity.LockedActivity
 import com.philkes.notallyx.presentation.collectIn
 import com.philkes.notallyx.presentation.dp
+import com.philkes.notallyx.presentation.showToast
 import com.philkes.notallyx.utils.audio.AudioRecordService
 import com.philkes.notallyx.utils.audio.LocalBinder
 import com.philkes.notallyx.utils.audio.Status
@@ -25,6 +26,7 @@ class RecordAudioActivity : LockedActivity<ActivityRecordAudioBinding>() {
 
     private var service: AudioRecordService? = null
     private lateinit var connection: ServiceConnection
+    private var bound = false
     private lateinit var cancelRecordCallback: OnBackPressedCallback
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,13 +35,25 @@ class RecordAudioActivity : LockedActivity<ActivityRecordAudioBinding>() {
         setContentView(binding.root)
         configureEdgeToEdgeInsets()
 
+        if (AudioRecordService.widgetRecording != null) {
+            showToast(R.string.widget_recording_busy)
+            finish()
+            return
+        }
+
         val intent = Intent(this, AudioRecordService::class.java)
         startService(intent)
 
         connection =
             object : ServiceConnection {
                 override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-                    service = (binder as LocalBinder<AudioRecordService>).getService()
+                    val activeService = (binder as LocalBinder<AudioRecordService>).getService()
+                    if (!activeService.editorAvailable) {
+                        showToast(R.string.widget_recording_failed)
+                        finish()
+                        return
+                    }
+                    service = activeService
                     service?.status?.collectIn(this@RecordAudioActivity) { status ->
                         updateUI(binding, service!!)
                         cancelRecordCallback.isEnabled = status != Status.READY
@@ -49,7 +63,7 @@ class RecordAudioActivity : LockedActivity<ActivityRecordAudioBinding>() {
                 override fun onServiceDisconnected(name: ComponentName?) {}
             }
 
-        bindService(intent, connection, BIND_AUTO_CREATE)
+        bound = bindService(intent, connection, BIND_AUTO_CREATE)
 
         binding.Main.setOnClickListener {
             val service = this.service
@@ -72,7 +86,7 @@ class RecordAudioActivity : LockedActivity<ActivityRecordAudioBinding>() {
         binding.Toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
         cancelRecordCallback =
-            object : OnBackPressedCallback(true) {
+            object : OnBackPressedCallback(false) {
                 override fun handleOnBackPressed() {
                     MaterialAlertDialogBuilder(this@RecordAudioActivity)
                         .setMessage(R.string.save_recording)
@@ -118,11 +132,11 @@ class RecordAudioActivity : LockedActivity<ActivityRecordAudioBinding>() {
 
     override fun onDestroy() {
         super.onDestroy()
-        service?.let {
+        if (bound) {
             unbindService(connection)
             service = null
         }
-        if (isFinishing) {
+        if (isFinishing && AudioRecordService.widgetRecording == null) {
             val intent = Intent(this, AudioRecordService::class.java)
             stopService(intent)
         }

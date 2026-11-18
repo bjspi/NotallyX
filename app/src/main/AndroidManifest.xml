@@ -137,6 +137,13 @@
             android:name=".presentation.activity.note.RecordAudioActivity"
             android:launchMode="singleTask" />
 
+        <activity
+            android:name=".presentation.widget.WidgetRecordActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.widgetRecording"
+            android:theme="@style/AppTheme.WidgetRecording" />
+
         <activity android:name=".presentation.activity.note.PlayAudioActivity" />
 
         <activity

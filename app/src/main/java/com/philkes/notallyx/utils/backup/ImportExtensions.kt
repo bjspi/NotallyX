@@ -645,16 +645,25 @@ suspend fun ContextWrapper.importAudio(original: File, deleteOriginalFile: Boole
         */
         val name = "${UUID.randomUUID()}.m4a"
         val final = File(audioRoot, name)
-        val input = FileInputStream(original)
-        input.copyToFile(final)
+        val retriever = MediaMetadataRetriever()
+        val duration =
+            try {
+                FileInputStream(original).use { input ->
+                    final.outputStream().use { output -> input.copyTo(output) }
+                }
+                retriever.setDataSource(final.path)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong()
+            } catch (e: Exception) {
+                final.delete()
+                throw e
+            } finally {
+                retriever.release()
+            }
 
         if (deleteOriginalFile) {
             original.delete()
         }
 
-        val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(final.path)
-        val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-        Audio(name, duration?.toLong(), System.currentTimeMillis())
+        Audio(name, duration, System.currentTimeMillis())
     }
 }

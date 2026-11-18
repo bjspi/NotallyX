@@ -139,25 +139,17 @@ open class NoteModel(
     }
 
     fun addAudio() {
+        val noteId = id
         viewModelScope.launch(Dispatchers.IO) {
             val audio = app.importAudio(app.getTempAudioFile(), true)
-            attachmentMutex.withLock {
-                val copy = ArrayList(audios.value)
-                copy.add(audio)
-                audios.value = copy
-                updateAudios()
-            }
+            attachmentMutex.withLock { updateAudios(noteId) { it + audio } }
         }
     }
 
     fun deleteAudio(audio: Audio) {
+        val noteId = id
         viewModelScope.launch(Dispatchers.IO) {
-            attachmentMutex.withLock {
-                val copy = ArrayList(audios.value)
-                copy.remove(audio)
-                audios.value = copy
-                updateAudios()
-            }
+            attachmentMutex.withLock { updateAudios(noteId) { it - audio } }
             app.deleteAttachments(arrayListOf(audio))
         }
     }
@@ -312,11 +304,29 @@ open class NoteModel(
         return baseNote.copy(id = id)
     }
 
-    suspend fun deleteBaseNote(checkAutoSave: Boolean = true) {
-        app.cancelPinAndReminders(id, reminders.value)
-        withContext(Dispatchers.IO) {
-            baseNoteDao?.delete(id) ?: throw DatabaseNotConnectedException()
+    suspend fun deleteBaseNote(
+        checkAutoSave: Boolean = true,
+        preserveExternalChanges: Boolean = false,
+    ) {
+        val noteId = id
+        val db = database.value ?: throw DatabaseNotConnectedException()
+        val dao = db.getBaseNoteDao()
+        val deleted = db.withTransaction {
+            val current = dao.get(noteId)
+            if (preserveExternalChanges && current != null) {
+                val original = originalNote
+                if (
+                    !current.equalContents(original) ||
+                        current.audios.any { it !in original?.audios.orEmpty() }
+                ) {
+                    return@withTransaction false
+                }
+            }
+            dao.delete(noteId)
+            true
         }
+        if (!deleted) return
+        app.cancelPinAndReminders(id, reminders.value)
         WidgetProvider.sendBroadcast(app, longArrayOf(id))
         val attachments = ArrayList(images.value + files.value + audios.value)
         if (attachments.isNotEmpty()) {
@@ -352,6 +362,7 @@ open class NoteModel(
                             body = if (keepText) current.body else note.body,
                             spans = if (keepText) current.spans else note.spans,
                             items = if (keepItems) current.items else note.items,
+                            audios = current.audios,
                             modifiedTimestamp =
                                 maxOf(note.modifiedTimestamp, current.modifiedTimestamp),
                         )
@@ -405,9 +416,19 @@ open class NoteModel(
         }
     }
 
-    private suspend fun updateAudios() {
-        withContext(Dispatchers.IO) {
-            baseNoteDao?.updateAudios(id, audios.value) ?: throw DatabaseNotConnectedException()
+    private suspend fun updateAudios(noteId: Long, transform: (List<Audio>) -> List<Audio>) {
+        if (noteId == 0L) {
+            if (id == noteId) audios.value = transform(audios.value)
+            return
+        }
+        val db = database.value ?: throw DatabaseNotConnectedException()
+        val dao = db.getBaseNoteDao()
+        val updated = db.withTransaction {
+            val note = dao.get(noteId) ?: throw DatabaseNotConnectedException()
+            transform(note.audios).also { dao.updateAudios(noteId, it) }
+        }
+        if (id == noteId) {
+            audios.value = updated
         }
     }
 
@@ -571,6 +592,7 @@ open class NoteModel(
         if (baseNote == null) return
         originalNote = originalNote?.copy(reminders = baseNote.reminders) ?: baseNote.deepCopy()
         reminders.value = baseNote.reminders
+        audios.value = baseNote.audios
     }
 
     enum class FileType {

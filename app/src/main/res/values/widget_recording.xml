@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme.WidgetRecording">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+    <string name="widget_voice_plus">Voice+ · Record audio</string>
+    <string name="widget_recording_busy">A NotallyX recording is already open.</string>
+    <string name="widget_recording_failed">Could not record or save the audio.</string>
+</resources>
