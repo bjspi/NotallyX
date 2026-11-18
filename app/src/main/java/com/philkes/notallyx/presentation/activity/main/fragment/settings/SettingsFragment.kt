@@ -403,6 +403,20 @@ class SettingsFragment : Fragment() {
             }
 
             launch {
+                widgetMarkdown.flow.collect { value ->
+                    binding.WidgetMarkdown.setup(
+                        widgetMarkdown,
+                        value,
+                        requireContext(),
+                        layoutInflater,
+                        R.string.widget_markdown_description,
+                    ) { enabled ->
+                        model.savePreference(widgetMarkdown, enabled)
+                    }
+                }
+            }
+
+            launch {
                 notesSorting.flow.collect { notesSort ->
                     binding.NotesSortOrder.setup(
                         notesSorting,

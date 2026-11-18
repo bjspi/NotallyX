@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_markdown">Markdown in Widgets</string>
+    <string name="widget_markdown_description">Markdown in Textnotizen auf dem Startbildschirm darstellen. Formatierte Notizen verwenden die in der App gespeicherte Formatierung.</string>
+</resources>

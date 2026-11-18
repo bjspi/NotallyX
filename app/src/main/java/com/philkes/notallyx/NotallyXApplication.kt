@@ -113,6 +113,17 @@ class NotallyXApplication : Application(), Application.ActivityLifecycleCallback
         }
 
         applicationScope.launch {
+            preferences.widgetMarkdown.flow.withPrevious().collect { (previous, _) ->
+                if (previous != null) {
+                    WidgetProvider.updateWidgets(
+                        this@NotallyXApplication,
+                        locked = preferences.isLockEnabled && locked.value,
+                    )
+                }
+            }
+        }
+
+        applicationScope.launch {
             preferences.backupsFolder.flow.withPrevious().collect {
                 (backupFolderBefore, backupFolder) ->
                 checkUpdatePeriodicBackup(
