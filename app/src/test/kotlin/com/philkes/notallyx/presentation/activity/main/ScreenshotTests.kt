@@ -3,8 +3,12 @@ package com.philkes.notallyx.presentation.activity.main
 import android.content.Intent
 import android.os.SystemClock
 import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import androidx.annotation.IdRes
+import androidx.annotation.StringRes
 import androidx.core.view.GravityCompat
+import androidx.core.view.children
 import androidx.core.widget.NestedScrollView
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,6 +23,7 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.action.ViewActions.typeText
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
@@ -31,10 +36,12 @@ import com.philkes.notallyx.R
 import com.philkes.notallyx.data.ShadowContextImplMedia
 import com.philkes.notallyx.data.imports.google.GoogleKeepImporterTest.Companion.createBaseNote
 import com.philkes.notallyx.data.model.Label
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.Reminder
 import com.philkes.notallyx.presentation.activity.main.MainActivity.Companion.EXTRA_FRAGMENT_TO_OPEN
 import com.philkes.notallyx.presentation.activity.note.EditActivity.Companion.EXTRA_SELECTED_BASE_NOTE
 import com.philkes.notallyx.presentation.activity.note.EditNoteActivity
+import com.philkes.notallyx.presentation.view.note.action.MoreNoteBottomSheet
 import com.philkes.notallyx.test.FakeAndroidKeyStore
 import com.philkes.notallyx.test.byContentDescription
 import com.philkes.notallyx.test.byId
@@ -53,6 +60,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.Test
@@ -134,6 +142,62 @@ class ScreenshotTests {
                     "${ScreenshotTests::class.java.simpleName}/editNote/01_title_and_body.png"
                 )
         }
+    }
+
+    @Test
+    fun markdownNoteUsesTheSavedFormatAndRendersAReadOnlyPreview() = runTest {
+        val source = "# A heading\n\n**Body**"
+        val noteId =
+            withContext(Dispatchers.IO) {
+                database.getBaseNoteDao().insert(createBaseNote(title = "Example", body = source))
+            }
+        preferences.newNotesUseMarkdown.save(true)
+        try {
+            val intent =
+                Intent(context, EditNoteActivity::class.java)
+                    .putExtra(EXTRA_SELECTED_BASE_NOTE, noteId)
+            ActivityScenario.launch<EditNoteActivity>(intent).use { scenario ->
+                waitUntilSucceeds { R.id.EnterBody.byId().check(matches(withText(source))) }
+                scenario.onActivity { activity ->
+                    clickNoteAction(activity, R.string.tap_for_more_options)
+                    val manager = activity.supportFragmentManager
+                    manager.executePendingTransactions()
+                    val sheet =
+                        manager.findFragmentByTag(MoreNoteBottomSheet.TAG) as MoreNoteBottomSheet
+                    val formatAction = sheet.layout.getChildAt(0) as TextView
+                    assertEquals("Note format: Text with formatting", formatAction.text.toString())
+                    formatAction.performClick()
+                }
+                onView(withText(R.string.note_format_markdown)).inRoot(isDialog()).perform(click())
+                scenario.onActivity { activity ->
+                    assertEquals(NoteFormat.MARKDOWN, activity.notallyModel.format)
+                    clickNoteAction(activity, R.string.read_only)
+                }
+                waitUntilSucceeds {
+                    R.id.MarkdownPreview.byId().check(matches(withText("A heading\nBody")))
+                }
+                onView(isRoot()).captureRoboImage("ScreenshotTests/markdownNote/preview.png")
+            }
+            val saved = withContext(Dispatchers.IO) { database.getBaseNoteDao().get(noteId) }
+            assertEquals(NoteFormat.MARKDOWN, saved?.format)
+            assertEquals(source, saved?.body)
+
+            ActivityScenario.launch(EditNoteActivity::class.java).use { scenario ->
+                waitUntilSucceeds { R.id.EnterBody.byId().check(matches(isDisplayed())) }
+                scenario.onActivity { assertEquals(NoteFormat.MARKDOWN, it.notallyModel.format) }
+            }
+        } finally {
+            preferences.newNotesUseMarkdown.save(false)
+        }
+    }
+
+    private fun clickNoteAction(activity: EditNoteActivity, @StringRes label: Int) {
+        val description = activity.getString(label)
+        activity
+            .findViewById<ViewGroup>(R.id.BottomAppBarRight)
+            .children
+            .first { it.contentDescription == description }
+            .performClick()
     }
 
     @Test

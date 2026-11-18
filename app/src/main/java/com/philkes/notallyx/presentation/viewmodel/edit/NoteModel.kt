@@ -25,6 +25,7 @@ import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.FileAttachment
 import com.philkes.notallyx.data.model.Folder
 import com.philkes.notallyx.data.model.ListItem
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.NoteViewMode
 import com.philkes.notallyx.data.model.Reminder
 import com.philkes.notallyx.data.model.SpanRepresentation
@@ -80,6 +81,7 @@ open class NoteModel(
     var isNewNote = true
 
     var type = Type.NOTE
+    var format = NoteFormat.TEXT
 
     var id = 0L
     var folder = Folder.NOTES
@@ -276,6 +278,7 @@ open class NoteModel(
                 setLabels(baseNote.labels)
 
                 body = baseNote.body.applySpans(baseNote.spans)
+                format = baseNote.format
 
                 items.clear()
                 items.addAll(baseNote.items)
@@ -294,6 +297,9 @@ open class NoteModel(
     }
 
     private suspend fun createBaseNote(createInDb: Boolean = true): BaseNote {
+        format =
+            if (type == Type.NOTE && preferences.newNotesUseMarkdown.value) NoteFormat.MARKDOWN
+            else NoteFormat.TEXT
         val baseNote = getBaseNote()
         if (createInDb) {
             id =
@@ -361,6 +367,10 @@ open class NoteModel(
                             title = if (note.title == original.title) current.title else note.title,
                             body = if (keepText) current.body else note.body,
                             spans = if (keepText) current.spans else note.spans,
+                            format =
+                                if (note.type == Type.NOTE && note.format == original.format)
+                                    current.format
+                                else note.format,
                             items = if (keepItems) current.items else note.items,
                             audios = current.audios,
                             modifiedTimestamp =
@@ -376,7 +386,8 @@ open class NoteModel(
                 backupOnSave = checkBackupOnSave,
                 forceFullBackup = original?.attachmentsDifferFrom(saved) == true,
             )
-            originalNote = note.deepCopy()
+            if (id == note.id) id = saved.id
+            originalNote = note.copy(id = saved.id).deepCopy()
             return@withContext saved.id
         }
     }
@@ -455,6 +466,7 @@ open class NoteModel(
             reminders.value,
             viewMode.value,
             isPinnedToStatus,
+            if (type == Type.NOTE) format else NoteFormat.TEXT,
         )
     }
 
@@ -556,6 +568,7 @@ open class NoteModel(
     }
 
     suspend fun convertTo(noteType: Type) {
+        format = NoteFormat.TEXT
         when (noteType) {
             Type.NOTE -> {
                 body = SpannableStringBuilder(items.joinToString(separator = "\n") { it.body })

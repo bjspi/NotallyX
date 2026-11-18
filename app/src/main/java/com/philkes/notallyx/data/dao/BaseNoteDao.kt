@@ -16,6 +16,7 @@ import com.philkes.notallyx.data.model.FileAttachment
 import com.philkes.notallyx.data.model.Folder
 import com.philkes.notallyx.data.model.LabelsInBaseNote
 import com.philkes.notallyx.data.model.ListItem
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.Reminder
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.presentation.getQuantityString
@@ -27,7 +28,13 @@ import kotlinx.coroutines.flow.map
 
 data class NoteIdReminder(val id: Long, val reminders: List<Reminder>)
 
-data class NoteIndex(val id: Long, val type: Type, val folder: Folder, val title: String)
+data class NoteIndex(
+    val id: Long,
+    val type: Type,
+    val folder: Folder,
+    val title: String,
+    val format: NoteFormat,
+)
 
 data class WidgetNoteHeader(val title: String, val color: ColorString, val type: Type)
 
@@ -136,7 +143,7 @@ interface BaseNoteDao {
 
     @Query("SELECT B.id FROM BaseNote B") fun getAllIds(): List<Long>
 
-    @Query("SELECT id, type, folder, title FROM BaseNote ORDER BY id")
+    @Query("SELECT id, type, folder, title, format FROM BaseNote ORDER BY id")
     fun getNoteIndex(): List<NoteIndex>
 
     @Query("SELECT * FROM BaseNote WHERE id = :id") fun get(id: Long): BaseNote?

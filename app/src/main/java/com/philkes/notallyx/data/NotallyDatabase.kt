@@ -33,7 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @TypeConverters(Converters::class)
-@Database(entities = [BaseNote::class, Label::class], version = 11)
+@Database(entities = [BaseNote::class, Label::class], version = 12)
 abstract class NotallyDatabase : RoomDatabase() {
 
     abstract fun getLabelDao(): LabelDao
@@ -217,6 +217,7 @@ abstract class NotallyDatabase : RoomDatabase() {
                     Migration9,
                     Migration10,
                     Migration11,
+                    Migration12,
                 )
 
         @VisibleForTesting
@@ -383,6 +384,14 @@ abstract class NotallyDatabase : RoomDatabase() {
                     order++
                 }
                 cursor.close()
+            }
+        }
+
+        object Migration12 : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `BaseNote` ADD COLUMN `format` TEXT NOT NULL DEFAULT 'TEXT'"
+                )
             }
         }
     }

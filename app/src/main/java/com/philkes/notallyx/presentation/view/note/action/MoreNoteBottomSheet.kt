@@ -13,7 +13,12 @@ class MoreNoteBottomSheet(
     actionHandler: NoteActionHandler,
     topActions: Collection<EditAction> = listOf(),
     bottomAction: EditAction? = null,
-) : ActionBottomSheet(createActions(model, actionHandler, topActions, bottomAction), color) {
+    extraActions: List<Action> = emptyList(),
+) :
+    ActionBottomSheet(
+        extraActions + createActions(model, actionHandler, topActions, bottomAction),
+        color,
+    ) {
 
     companion object {
         const val TAG = "MoreNoteBottomSheet"

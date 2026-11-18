@@ -12,6 +12,7 @@ import com.philkes.notallyx.NotallyXApplication
 import com.philkes.notallyx.data.NotallyDatabase
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Converters
+import com.philkes.notallyx.data.model.toMarkdown
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
 import com.philkes.notallyx.presentation.widget.WidgetProvider
 import com.philkes.notallyx.utils.SUBFOLDER_AUDIOS
@@ -21,6 +22,7 @@ import com.philkes.notallyx.utils.onNoteSaved
 import com.philkes.notallyx.utils.resolveAttachmentFile
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
@@ -46,7 +48,13 @@ class AdbNotesProvider : ContentProvider() {
                 dao.getNoteIndex().forEach { note ->
                     cursor.addValues(
                         INDEX_COLUMNS,
-                        listOf(note.id, note.type.name, note.folder.name, note.title),
+                        listOf(
+                            note.id,
+                            note.type.name,
+                            note.folder.name,
+                            note.title,
+                            note.format.value,
+                        ),
                     )
                 }
                 cursor
@@ -93,7 +101,26 @@ class AdbNotesProvider : ContentProvider() {
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         val app = requireAccess()
         val path = uri.pathSegments
-        if (mode != "r" || path.size != 5 || path[0] != "notes" || path[2] != "attachments") {
+        if (mode != "r" || path.firstOrNull() != "notes") {
+            throw FileNotFoundException()
+        }
+        if (path.size == 3 && path[2] == "markdown") {
+            val bytes =
+                runBlocking(Dispatchers.IO) {
+                    val note =
+                        getDatabase(app).getBaseNoteDao().get(noteId(path))
+                            ?: throw FileNotFoundException()
+                    note.toMarkdown().toByteArray(Charsets.UTF_8)
+                }
+            return openPipeHelper(uri, "text/markdown", null, bytes) { output, _, _, _, content ->
+                try {
+                    ParcelFileDescriptor.AutoCloseOutputStream(output).use { it.write(content) }
+                } catch (_: IOException) {
+                    // The reader closed the pipe before consuming the whole note.
+                }
+            }
+        }
+        if (path.size != 5 || path[2] != "attachments") {
             throw FileNotFoundException()
         }
         val name = path[4]
@@ -176,14 +203,16 @@ class AdbNotesProvider : ContentProvider() {
             Converters.filesToJson(images),
             Converters.filesToJson(files),
             Converters.audiosToJson(audios),
+            format.value,
         )
 
     companion object {
         // Android's reserved UID for processes launched by adb shell.
         private const val SHELL_UID = 2000
-        private val INDEX_COLUMNS = listOf("id", "type", "folder", "title")
+        private val NOTE_ID_COLUMNS = listOf("id", "type", "folder", "title")
+        private val INDEX_COLUMNS = NOTE_ID_COLUMNS + "format"
         private val NOTE_COLUMNS =
-            INDEX_COLUMNS +
+            NOTE_ID_COLUMNS +
                 listOf(
                     "body",
                     "timestamp",
@@ -199,6 +228,7 @@ class AdbNotesProvider : ContentProvider() {
                     "images",
                     "files",
                     "audios",
+                    "format",
                 )
     }
 }

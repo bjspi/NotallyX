@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_markdown">Markdown in widgets</string>
-    <string name="widget_markdown_description">Render Markdown in text notes on the home screen. Notes with rich-text formatting use the formatting saved in the app.</string>
+    <string name="new_notes_use_markdown">Markdown for new notes</string>
+    <string name="new_notes_use_markdown_description">Use Markdown when creating a text note. You can change the format in each note’s menu.</string>
+    <string name="note_format">Note format</string>
+    <string name="note_format_text">Text with formatting</string>
+    <string name="note_format_markdown">Markdown</string>
+    <string name="note_format_action">Note format: %1$s</string>
+    <string name="note_save_failed">Could not save the note.</string>
 </resources>

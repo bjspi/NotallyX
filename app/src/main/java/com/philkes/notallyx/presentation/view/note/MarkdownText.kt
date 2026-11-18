@@ -1,9 +1,10 @@
-package com.philkes.notallyx.presentation.widget
+package com.philkes.notallyx.presentation.view.note
 
 import android.text.Spanned
 import android.text.style.LeadingMarginSpan
 import androidx.core.text.HtmlCompat
 import com.philkes.notallyx.data.model.BaseNote
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.presentation.applySpans
 import com.philkes.notallyx.presentation.dp
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -30,19 +31,15 @@ private val markdownRenderer =
         .escapeHtml(true)
         .sanitizeUrls(true)
         .softbreak("<br />")
-        .nodeRendererFactory(::WidgetHtmlRenderer)
+        .nodeRendererFactory(::MarkdownHtmlRenderer)
         .build()
 
 private const val LIST_INDENT_TAG = "notallylist"
 
-internal fun BaseNote.widgetBody(markdownEnabled: Boolean): CharSequence =
-    when {
-        spans.isNotEmpty() -> body.applySpans(spans)
-        markdownEnabled -> renderWidgetMarkdown(body)
-        else -> body
-    }
+internal fun BaseNote.renderedBody(): CharSequence =
+    if (format == NoteFormat.MARKDOWN) renderMarkdown(body) else body.applySpans(spans)
 
-private fun renderWidgetMarkdown(body: String): CharSequence {
+internal fun renderMarkdown(body: String): CharSequence {
     val html = markdownRenderer.render(markdownParser.parse(body))
     var itemStart = 0
     return HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_COMPACT, null) {
@@ -68,7 +65,8 @@ private fun renderWidgetMarkdown(body: String): CharSequence {
 }
 
 // HtmlCompat supports only a subset of HTML that can become Android text spans.
-private class WidgetHtmlRenderer(context: HtmlNodeRendererContext) : CoreHtmlNodeRenderer(context) {
+private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
+    CoreHtmlNodeRenderer(context) {
     private val writer = context.writer
     private var itemNumber: Int? = null
     private var listDepth = -1

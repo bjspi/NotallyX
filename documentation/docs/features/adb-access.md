@@ -12,17 +12,23 @@ adb shell content query --uri content://com.philkes.notallyx.debug.adb/notes/42
 adb shell 'content update --uri content://com.philkes.notallyx.debug.adb/notes/42 --bind "title:s:Edited on PC"'
 ```
 
-The index contains IDs, note types, folders and titles, including notes in the archive and bin. The individual note contains the body, dates, labels, formatting, checklist items, reminders and attachment metadata. Dates use Unix milliseconds. To read specific columns, pass `--projection title:body:spans`.
+The index contains IDs, note types, folders, titles and formats, including notes in the archive and bin. The individual note contains the body, dates, labels, formatting, checklist items, reminders and attachment metadata. Dates use Unix milliseconds. To read specific columns, pass `--projection title:format:body:spans`.
 
-You can update `title` on any note, `body` and `spans` on text notes, and `items` on checklists. To send formatting, checklist items or text containing a colon, encode a UTF-8 JSON object as Base64 and bind it as `patch`. For example, in PowerShell
+You can update `title` on any note, `format`, `body` and `spans` on text notes, and `items` on checklists. A text note’s `format` is either `text` or `markdown`. For Markdown notes, `body` contains the Markdown source. To send multiline Markdown, formatting, checklist items or text containing a colon, encode a UTF-8 JSON object as Base64 and bind it as `patch`. For example, in PowerShell
 
 ```powershell
-$json = '{"body":"Updated: text","spans":[{"start":0,"end":7,"bold":true}]}'
+$json = '{"format":"markdown","body":"# Updated\n\n- First item"}'
 $patch = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 adb shell content update --uri content://com.philkes.notallyx.debug.adb/notes/42 --bind "patch:s:$patch"
 ```
 
-Use the JSON arrays returned by the query as templates for `spans` and `items`. Span positions are zero-based UTF-16 offsets with exclusive ends. A body update without spans clears the old formatting. Checklist items are listed in display order, with each child following its parent or sibling.
+Use the JSON arrays returned by the query as templates for `spans` and `items`. Span positions are zero-based UTF-16 offsets with exclusive ends. A body update without spans clears the old rich-text formatting. A format-only update keeps the source and its saved spans. Checklist items are listed in display order, with each child following its parent or sibling.
+
+Download a note as a UTF-8 Markdown file. This preserves the source for a Markdown note and exports existing formatting for text notes and checklists.
+
+```sh
+adb exec-out content read --uri content://com.philkes.notallyx.debug.adb/notes/42/markdown > note.md
+```
 
 Download an attachment by note ID, category and stored name. Use `localName` from `images` or `files`, or `name` from `audios`. URI-encode the name if it contains reserved URI characters.
 

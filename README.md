@@ -8,7 +8,7 @@
 
 - **ADB access.** Opt in under **Settings → Security** to read notes and attachments and edit existing text notes and checklists from an authorized ADB shell. [ADB commands](documentation/docs/features/adb-access.md)
 - **Voice+ in the home-screen widget.** Start a recording with one tap, see its duration, and stop to attach the M4A file to the note selected at the start.
-- **Widget formatting.** Widgets display saved rich text. Enable **Settings → Appearance → Markdown in widgets** for Markdown headings, lists and code in plain-text notes.
+- **Markdown notes.** Choose **Note format** in a text note’s menu to use Markdown. Its source is available for editing and export. The read-only view and widget render headings, lists and code. **Settings → Appearance → Markdown for new notes** sets the default.
 
 <div style="display: flex; justify-content: space-between; width: 100%;">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Image 6" style="width: 32%;"/>

@@ -4,9 +4,11 @@ import android.content.ContentValues
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Base64
+import com.philkes.notallyx.data.imports.google.GoogleKeepImporterTest.Companion.createBaseNote
 import com.philkes.notallyx.data.model.Audio
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Folder
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.NoteViewMode
 import com.philkes.notallyx.data.model.SpanRepresentation
 import com.philkes.notallyx.data.model.Type
@@ -65,7 +67,7 @@ class AdbNotesProviderTest {
         }
 
         app.locked.value = false
-        provider.query(notes, null, null, null, null).use { assertEquals(4, it.columnCount) }
+        provider.query(notes, null, null, null, null).use { assertEquals(5, it.columnCount) }
     }
 
     @Test
@@ -122,5 +124,40 @@ class AdbNotesProviderTest {
             ParcelFileDescriptor.AutoCloseInputStream(provider.openFile(audioUri, "r")).use {
                 assertEquals("audio bytes", it.reader().readText())
             }
+
+            @Test
+            fun markdownSourceRoundTripsThroughAdb() =
+                runBlocking(Dispatchers.IO) {
+                    preferences.adbAccess.save(true)
+                    ShadowBinder.setCallingUid(2000)
+                    val dao = database.getBaseNoteDao()
+                    val id = dao.insert(createBaseNote(body = "Original"))
+                    val uri = Uri.withAppendedPath(notes, id.toString())
+                    val source = "# Über die Notiz\n\n- Item: one\n  - Two\n"
+                    val patch =
+                        org.json
+                            .JSONObject()
+                            .put("format", "markdown")
+                            .put("body", source)
+                            .toString()
+                    val values =
+                        ContentValues().apply {
+                            put("patch", Base64.encodeToString(patch.toByteArray(), Base64.NO_WRAP))
+                        }
+                    assertEquals(1, provider.update(uri, values, null, null))
+                    provider.query(uri, arrayOf("format", "body"), null, null, null).use {
+                        assertTrue(it.moveToFirst())
+                        assertEquals("markdown", it.getString(0))
+                        assertEquals(source, it.getString(1))
+                    }
+                    val download = Uri.withAppendedPath(uri, "markdown")
+                    ParcelFileDescriptor.AutoCloseInputStream(provider.openFile(download, "r"))
+                        .use { assertEquals(source, it.reader(Charsets.UTF_8).readText()) }
+
+                    val switchBack = ContentValues().apply { put("format", "text") }
+                    assertEquals(1, provider.update(uri, switchBack, null, null))
+                    assertEquals(NoteFormat.TEXT, dao.get(id)?.format)
+                    assertEquals(source, dao.get(id)?.body)
+                }
         }
 }

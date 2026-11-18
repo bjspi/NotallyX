@@ -101,6 +101,7 @@ fun BaseNote.toJson(): String {
 
     when (type) {
         Type.NOTE -> {
+            jsonObject.put("format", format.value)
             jsonObject.put("body", body)
             jsonObject.put("spans", Converters.spansToJSONArray(spans))
         }
@@ -155,6 +156,9 @@ fun String.toBaseNote(): BaseNote {
         reminders,
         viewMode,
         pinnedToStatusBar,
+        if (type == Type.NOTE)
+            NoteFormat.fromValue(jsonObject.optString("format")) ?: NoteFormat.TEXT
+        else NoteFormat.TEXT,
     )
 }
 
@@ -273,16 +277,12 @@ fun BaseNote.toHtml(showDateCreated: Boolean, imagesRootFolder: File?) = buildSt
 
 fun List<BaseNote>.toNoteIdReminders() = map { NoteIdReminder(it.id, it.reminders) }
 
-fun BaseNote.toMarkdown(): String = buildString {
+fun BaseNote.toMarkdown(): String =
     when (type) {
-        Type.NOTE -> {
-            append(createMarkdownFromBodyAndSpans(body, spans))
-        }
-        Type.LIST -> {
-            append(items.toMarkdownChecklist())
-        }
+        Type.NOTE ->
+            if (format == NoteFormat.MARKDOWN) body else createMarkdownFromBodyAndSpans(body, spans)
+        Type.LIST -> items.toMarkdownChecklist()
     }
-}
 
 private fun List<ListItem>.toMarkdownChecklist(): String = buildString {
     for (item in this@toMarkdownChecklist) {

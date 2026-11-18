@@ -73,6 +73,13 @@ class MarkdownExportTest {
     }
 
     @Test
+    fun markdownNoteExportsItsSourceVerbatim() {
+        val source = "# Heading\n\n- A bullet\n\n"
+        val markdown = note(source).copy(format = NoteFormat.MARKDOWN)
+        assertEquals(source, markdown.toMarkdown())
+    }
+
+    @Test
     fun export_list_items_to_checklist() {
         val now = System.currentTimeMillis()
         val items =

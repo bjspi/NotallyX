@@ -195,6 +195,18 @@
                     android:paddingEnd="24dp"
                     android:textAppearance="?attr/textAppearanceBodyLarge" />
 
+                <TextView
+                    android:id="@+id/MarkdownPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:paddingStart="24dp"
+                    android:paddingTop="16dp"
+                    android:paddingEnd="24dp"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    android:textIsSelectable="true"
+                    android:visibility="gone" />
+
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/MainListView"
                     android:layout_width="match_parent"

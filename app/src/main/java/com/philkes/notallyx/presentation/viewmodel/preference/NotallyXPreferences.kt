@@ -45,8 +45,8 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
         )
     val textSizeOverview =
         FloatPreference("textSizeOverview", preferences, 16f, 12f, 32f, R.string.text_size_overview)
-    val widgetMarkdown =
-        BooleanPreference("widgetMarkdown", preferences, false, R.string.widget_markdown)
+    val newNotesUseMarkdown =
+        BooleanPreference("widgetMarkdown", preferences, false, R.string.new_notes_use_markdown)
     val dateFormatOverview =
         createEnumPreference(
             preferences,
@@ -360,7 +360,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
                 backupsFolder,
                 textSizeNoteEditor,
                 textSizeOverview,
-                widgetMarkdown,
+                newNotesUseMarkdown,
                 dateFormatOverview,
                 timeFormatOverview,
                 dateFormatNoteView,

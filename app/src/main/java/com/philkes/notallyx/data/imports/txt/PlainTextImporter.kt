@@ -4,16 +4,15 @@ import android.app.Application
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.philkes.notallyx.data.imports.ExternalImporter
-import com.philkes.notallyx.data.imports.markdown.parseBodyAndSpansFromMarkdown
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Folder
 import com.philkes.notallyx.data.model.ListItem
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.NoteViewMode
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.presentation.view.misc.Progress
 import com.philkes.notallyx.presentation.viewmodel.ExportMimeType
 import com.philkes.notallyx.utils.MIME_TYPE_JSON
-import com.philkes.notallyx.utils.log
 import com.philkes.notallyx.utils.readFileContents
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,40 +33,28 @@ class PlainTextImporter : ExternalImporter {
                 }
 
                 file.isFile -> {
-                    if (file.type?.isTextMimeType() == false) {
+                    val markdown = file.isMarkdownFile()
+                    if (!markdown && file.type?.isTextMimeType() == false) {
                         return
                     }
                     val fileNameWithoutExtension = file.name?.substringBeforeLast(".") ?: ""
-                    var content = app.contentResolver.readFileContents(file.uri)
+                    val content = app.contentResolver.readFileContents(file.uri)
                     val listItems = mutableListOf<ListItem>()
-                    // If content contains recognizable list syntax, prefer importing as LIST
-                    // If its markdown there could only be a headerline, ignore it for LISTs
                     val listContent =
-                        if (file.isMarkdownFile() && content.startsWith("#")) {
-                            content.lines().drop(1).joinToString("\n")
-                        } else content
-                    listContent.findListSyntaxRegex()?.let { listSyntaxRegex ->
+                        if (markdown)
+                            content
+                                .lines()
+                                .filter(String::isNotBlank)
+                                .takeIf { lines ->
+                                    lines.isNotEmpty() && lines.all(MARKDOWN_TASK::matches)
+                                }
+                                ?.joinToString("\n")
+                                ?.trimStart()
+                        else content
+                    listContent?.findListSyntaxRegex()?.let { listSyntaxRegex ->
                         listItems.addAll(listContent.extractListItems(listSyntaxRegex))
-                        content = ""
                     }
                     val timestamp = System.currentTimeMillis()
-
-                    val (body, spans) =
-                        if (file.isMarkdownFile() && listItems.isEmpty()) {
-                            // Parse Markdown into body + spans, ignoring unsupported formatting
-                            try {
-                                parseBodyAndSpansFromMarkdown(content)
-                            } catch (e: Exception) {
-                                app.log(
-                                    TAG,
-                                    msg =
-                                        "Parsing from Markdown content failed, will import as raw text. Markdown Content:\n$content",
-                                    throwable = e,
-                                )
-                                // Fallback to plain text if parser fails
-                                Pair(content, emptyList())
-                            }
-                        } else Pair(content, emptyList())
 
                     notes.add(
                         BaseNote(
@@ -80,8 +67,8 @@ class PlainTextImporter : ExternalImporter {
                             timestamp = timestamp,
                             modifiedTimestamp = timestamp,
                             labels = listOf(),
-                            body = if (listItems.isEmpty()) body else "",
-                            spans = if (listItems.isEmpty()) spans else listOf(),
+                            body = if (listItems.isEmpty()) content else "",
+                            spans = emptyList(),
                             items = listItems,
                             images = listOf(),
                             files = listOf(),
@@ -89,6 +76,8 @@ class PlainTextImporter : ExternalImporter {
                             reminders = listOf(),
                             NoteViewMode.EDIT,
                             false,
+                            if (markdown && listItems.isEmpty()) NoteFormat.MARKDOWN
+                            else NoteFormat.TEXT,
                         )
                     )
                 }
@@ -114,7 +103,7 @@ class PlainTextImporter : ExternalImporter {
     }
 
     companion object {
-        private const val TAG = "PlainTextImporter"
+        private val MARKDOWN_TASK = Regex("""\s*- \[[ x]\](?:\s.*)?""")
     }
 }
 

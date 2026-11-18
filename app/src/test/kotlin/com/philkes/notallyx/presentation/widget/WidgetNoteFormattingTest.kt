@@ -17,6 +17,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.imports.google.GoogleKeepImporterTest.Companion.createBaseNote
 import com.philkes.notallyx.data.model.BaseNote
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.SpanRepresentation
 import com.philkes.notallyx.test.app
 import com.philkes.notallyx.test.database
@@ -40,7 +41,7 @@ class WidgetNoteFormattingTest {
     @get:Rule val roborazziRule = RoborazziRule()
 
     @Test
-    fun nativeFormattingSurvivesWidgetTransportWithMarkdownOnOrOff() {
+    fun existingTextNoteUsesItsOwnFormatRegardlessOfTheNewNoteDefault() {
         val note =
             createBaseNote(
                 body = "**literal** bold italic code",
@@ -54,7 +55,7 @@ class WidgetNoteFormattingTest {
         val activity = hostActivity()
         try {
             for (enabled in listOf(false, true)) {
-                preferences.widgetMarkdown.save(enabled)
+                preferences.newNotesUseMarkdown.save(enabled)
                 val body = render(activity, note).findViewById<TextView>(R.id.Note).text as Spanned
                 assertEquals(note.body, body.toString())
                 val styles = body.getSpans(0, body.length, StyleSpan::class.java)
@@ -65,12 +66,12 @@ class WidgetNoteFormattingTest {
                 )
             }
         } finally {
-            preferences.widgetMarkdown.save(false)
+            preferences.newNotesUseMarkdown.save(false)
         }
     }
 
     @Test
-    fun markdownSettingRendersHeadingsListsAndInlineStyles() {
+    fun markdownNoteRendersHeadingsListsAndInlineStylesWithTheDefaultOff() {
         val activity = hostActivity()
         val note =
             createBaseNote(
@@ -100,14 +101,13 @@ class WidgetNoteFormattingTest {
                         .trimIndent(),
             )
         try {
-            preferences.widgetMarkdown.save(false)
+            preferences.newNotesUseMarkdown.save(false)
             assertEquals(
                 note.body,
                 render(activity, note).findViewById<TextView>(R.id.Note).text.toString(),
             )
 
-            preferences.widgetMarkdown.save(true)
-            val widget = render(activity, note)
+            val widget = render(activity, note.copy(format = NoteFormat.MARKDOWN))
             val body = widget.findViewById<TextView>(R.id.Note).text as Spanned
             assertTrue(body.startsWith("Markdown\nDetails\nBold, italic, old and code."))
             assertTrue(body.contains("3. Third\n4. Fourth"))
@@ -125,7 +125,7 @@ class WidgetNoteFormattingTest {
             ShadowLooper.idleMainLooper()
             widget.captureRoboImage("WidgetNoteFormattingTest/markdown.png")
         } finally {
-            preferences.widgetMarkdown.save(false)
+            preferences.newNotesUseMarkdown.save(false)
         }
     }
 

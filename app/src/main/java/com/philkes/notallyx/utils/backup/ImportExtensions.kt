@@ -26,6 +26,7 @@ import com.philkes.notallyx.data.model.Converters
 import com.philkes.notallyx.data.model.FileAttachment
 import com.philkes.notallyx.data.model.Folder
 import com.philkes.notallyx.data.model.Label
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.NoteViewMode
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.data.model.parseToColorString
@@ -430,6 +431,11 @@ private fun Cursor.toBaseNote(sourceDb: SQLiteDatabase): BaseNote {
         if (viewModeIndex != -1) {
             NoteViewMode.valueOfOrDefault(getString(viewModeIndex))
         } else NoteViewMode.EDIT
+    val formatIndex = getColumnIndex("format")
+    val format =
+        if (type == Type.NOTE && formatIndex != -1) {
+            NoteFormat.fromValue(getString(formatIndex)) ?: NoteFormat.TEXT
+        } else NoteFormat.TEXT
     return BaseNote(
         0,
         type,
@@ -449,6 +455,7 @@ private fun Cursor.toBaseNote(sourceDb: SQLiteDatabase): BaseNote {
         reminders,
         viewMode,
         pinnedToStatusBar,
+        format,
     )
 }
 

@@ -5,6 +5,7 @@ import android.util.Base64
 import com.philkes.notallyx.data.dao.BaseNoteDao
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Converters
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.Type
 import org.json.JSONArray
 import org.json.JSONException
@@ -16,19 +17,23 @@ internal class AdbNoteChanges(input: ContentValues) {
 
     init {
         require(values.size() > 0 && values.keySet().all { it in EDITABLE_FIELDS }) {
-            "Provide one or more of title, body, spans, items"
+            "Provide one or more of title, body, format, spans, items"
         }
         require(values.keySet().all { values[it] is String }) { "Use string values" }
     }
 
     private val title = values.getAsString("title")
     private val body = values.getAsString("body")
+    private val format =
+        values.getAsString("format")?.let {
+            requireNotNull(NoteFormat.fromValue(it)) { "Format must be text or markdown" }
+        }
     private val spans = values.getAsString("spans")
     private val items = values.getAsString("items")
 
     fun applyTo(note: BaseNote): BaseNote {
-        require(note.type == Type.NOTE || (body == null && spans == null)) {
-            "Only text notes support body and spans"
+        require(note.type == Type.NOTE || (body == null && spans == null && format == null)) {
+            "Only text notes support body, format and spans"
         }
         require(note.type == Type.LIST || items == null) { "Only checklists support items" }
         val updatedBody = body ?: note.body
@@ -72,6 +77,7 @@ internal class AdbNoteChanges(input: ContentValues) {
         return note.copy(
             title = title ?: note.title,
             body = updatedBody,
+            format = format ?: note.format,
             spans = updatedSpans,
             items = updatedItems,
             modifiedTimestamp = maxOf(System.currentTimeMillis(), note.modifiedTimestamp + 1),
@@ -86,7 +92,7 @@ internal class AdbNoteChanges(input: ContentValues) {
         }
 
     companion object {
-        private val TEXT_FIELDS = setOf("title", "body")
+        private val TEXT_FIELDS = setOf("title", "body", "format")
         private val ARRAY_FIELDS = setOf("spans", "items")
         private val EDITABLE_FIELDS = TEXT_FIELDS + ARRAY_FIELDS
 

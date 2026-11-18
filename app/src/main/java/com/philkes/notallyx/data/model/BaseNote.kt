@@ -1,5 +1,6 @@
 package com.philkes.notallyx.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -27,6 +28,7 @@ data class BaseNote(
     val reminders: List<Reminder>,
     val viewMode: NoteViewMode,
     val isPinnedToStatus: Boolean,
+    @ColumnInfo(defaultValue = "'TEXT'") val format: NoteFormat = NoteFormat.TEXT,
 ) : Item {
 
     companion object {
@@ -57,6 +59,7 @@ data class BaseNote(
         if (reminders != other.reminders) return false
         if (viewMode != other.viewMode) return false
         if (isPinnedToStatus != other.isPinnedToStatus) return false
+        if (format != other.format) return false
 
         return true
     }
@@ -67,7 +70,8 @@ data class BaseNote(
             title == other.title &&
             body == other.body &&
             spans == other.spans &&
-            items == other.items
+            items == other.items &&
+            format == other.format
     }
 
     override fun hashCode(): Int {
@@ -88,6 +92,7 @@ data class BaseNote(
         result = 31 * result + reminders.hashCode()
         result = 31 * result + viewMode.hashCode()
         result = 31 * result + isPinnedToStatus.hashCode()
+        result = 31 * result + format.hashCode()
         return result
     }
 }

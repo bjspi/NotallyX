@@ -8,12 +8,16 @@ import android.view.View
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.philkes.notallyx.R
+import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.data.model.NoteViewMode
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.data.model.getNoteIdFromUrl
@@ -24,18 +28,25 @@ import com.philkes.notallyx.databinding.RecyclerToggleBinding
 import com.philkes.notallyx.presentation.addIconButton
 import com.philkes.notallyx.presentation.dp
 import com.philkes.notallyx.presentation.hideKeyboard
+import com.philkes.notallyx.presentation.setCancelButton
 import com.philkes.notallyx.presentation.setControlsContrastColorForAllViews
 import com.philkes.notallyx.presentation.setOnNextAction
 import com.philkes.notallyx.presentation.showKeyboard
 import com.philkes.notallyx.presentation.showToast
 import com.philkes.notallyx.presentation.view.note.TextFormattingAdapter
+import com.philkes.notallyx.presentation.view.note.action.Action
 import com.philkes.notallyx.presentation.view.note.action.AddNoteBottomSheet
+import com.philkes.notallyx.presentation.view.note.renderMarkdown
 import com.philkes.notallyx.utils.LinkMovementMethod
 import com.philkes.notallyx.utils.copyToClipBoard
 import com.philkes.notallyx.utils.findAllOccurrences
+import com.philkes.notallyx.utils.log
 import com.philkes.notallyx.utils.openNote
 import com.philkes.notallyx.utils.wrapWithChooser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class EditNoteActivity : EditActivity(Type.NOTE) {
@@ -45,6 +56,10 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
     private var textFormattingAdapter: TextFormattingAdapter? = null
 
     private var searchResultIndices: List<Pair<Int, Int>>? = null
+    private var markdownPreviewJob: Job? = null
+
+    private val canFormatText: Boolean
+        get() = canEdit && notallyModel.format == NoteFormat.TEXT
 
     override fun configureUI() {
         binding.EnterTitle.setOnNextAction { binding.EnterBody.requestFocus() }
@@ -56,13 +71,14 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
 
     override fun toggleCanEdit(mode: NoteViewMode) {
         super.toggleCanEdit(mode)
-        textFormatMenu.isVisible = mode == NoteViewMode.EDIT
+        textFormatMenu.isVisible = canFormatText
         when {
             mode == NoteViewMode.EDIT -> showKeyboard(binding.EnterBody)
             binding.EnterBody.isFocused -> hideKeyboard(binding.EnterBody)
         }
         binding.EnterBody.setCanEdit(mode == NoteViewMode.EDIT)
         setupEditor()
+        updateMarkdownPreview()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -114,7 +130,7 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         savedInstanceState?.let {
             val selectionStart = it.getInt(EXTRA_SELECTION_START, -1)
             val selectionEnd = it.getInt(EXTRA_SELECTION_END, -1)
-            if (selectionStart > -1) {
+            if (selectionStart > -1 && binding.EnterBody.isVisible) {
                 binding.EnterBody.postOnAnimation {
                     binding.EnterBody.focusAndSelect(selectionStart, selectionEnd)
                 }
@@ -124,20 +140,109 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
 
     private fun updateEditText() {
         binding.EnterBody.text = notallyModel.body
+        setupEditor()
+        updateMarkdownPreview()
+    }
+
+    override fun extraNoteActions(): List<Action> =
+        listOf(
+            Action(
+                R.string.note_format,
+                R.drawable.text_format,
+                label =
+                    getString(R.string.note_format_action, getString(notallyModel.format.label)),
+            ) {
+                chooseNoteFormat()
+                true
+            }
+        )
+
+    private fun chooseNoteFormat() {
+        val formats = NoteFormat.entries
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.note_format)
+            .setSingleChoiceItems(
+                formats.map { getString(it.label) }.toTypedArray(),
+                formats.indexOf(notallyModel.format),
+            ) { dialog, selection ->
+                dialog.dismiss()
+                val previous = notallyModel.format
+                val next = formats[selection]
+                if (next == previous) return@setSingleChoiceItems
+                lifecycleScope.launch {
+                    notallyModel.format = next
+                    try {
+                        saveNote()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        notallyModel.format = previous
+                        log("EditNoteActivity", throwable = e)
+                        showToast(R.string.note_save_failed)
+                    }
+                    initBottomMenu()
+                    setupEditor()
+                    updateMarkdownPreview()
+                }
+            }
+            .setCancelButton()
+            .show()
+    }
+
+    private val NoteFormat.label: Int
+        get() =
+            when (this) {
+                NoteFormat.TEXT -> R.string.note_format_text
+                NoteFormat.MARKDOWN -> R.string.note_format_markdown
+            }
+
+    override fun startSearch() {
+        super.startSearch()
+        updateMarkdownPreview()
+    }
+
+    override fun endSearch() {
+        super.endSearch()
+        updateMarkdownPreview()
+    }
+
+    private fun updateMarkdownPreview() {
+        val showPreview =
+            notallyModel.format == NoteFormat.MARKDOWN &&
+                !canEdit &&
+                !binding.EnterSearchKeyword.isVisible
+        markdownPreviewJob?.cancel()
+        binding.EnterBody.isVisible = !showPreview
+        binding.MarkdownPreview.isVisible = showPreview
+        if (showPreview) {
+            val source = notallyModel.body.toString()
+            binding.MarkdownPreview.text = null
+            markdownPreviewJob = lifecycleScope.launch {
+                binding.MarkdownPreview.text =
+                    withContext(Dispatchers.Default) { renderMarkdown(source) }
+                binding.MarkdownPreview.movementMethod =
+                    android.text.method.LinkMovementMethod.getInstance()
+                binding.MarkdownPreview.doOnLayout {
+                    if (it.isVisible) updateJumpButtonsVisibility((it as TextView).lineCount)
+                }
+            }
+        } else {
+            binding.MarkdownPreview.text = null
+        }
     }
 
     private fun setupEditor() {
         setupMovementMethod()
         binding.EnterBody.customSelectionActionModeCallback =
-            if (canEdit) {
+            if (canFormatText) {
                 FormattingActionModeCallback(this, binding.EnterBody)
             } else null
 
         binding.EnterBody.customInsertionActionModeCallback =
-            if (canEdit) {
+            if (canFormatText) {
                 FormattingActionModeCallback(this, binding.EnterBody)
             } else null
-        if (canEdit) {
+        if (canFormatText) {
             binding.EnterBody.setOnSelectionChange { selStart, selEnd ->
                 if (selEnd - selStart > 0) {
                     if (!textFormatMenu.isEnabled) {
@@ -180,7 +285,10 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
                 addIconButton(R.string.edit, R.drawable.text_format, colorInt) {
                         initBottomTextFormattingMenu()
                     }
-                    .apply { isEnabled = binding.EnterBody.isActionModeOn }
+                    .apply {
+                        isEnabled = binding.EnterBody.isActionModeOn
+                        isVisible = canFormatText
+                    }
         }
         setBottomAppBarColor(colorInt)
     }

@@ -44,7 +44,7 @@
             layout="@layout/preference" />
 
         <include
-            android:id="@+id/WidgetMarkdown"
+            android:id="@+id/NewNotesUseMarkdown"
             layout="@layout/preference" />
 
         <View

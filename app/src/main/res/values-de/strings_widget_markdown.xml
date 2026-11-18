@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_markdown">Markdown in Widgets</string>
-    <string name="widget_markdown_description">Markdown in Textnotizen auf dem Startbildschirm darstellen. Formatierte Notizen verwenden die in der App gespeicherte Formatierung.</string>
+    <string name="new_notes_use_markdown">Markdown für neue Notizen</string>
+    <string name="new_notes_use_markdown_description">Neue Textnotizen im Markdown-Format anlegen. Das Format lässt sich im Menü jeder Notiz ändern.</string>
+    <string name="note_format">Notizformat</string>
+    <string name="note_format_text">Text mit Formatierung</string>
+    <string name="note_format_markdown">Markdown</string>
+    <string name="note_format_action">Notizformat: %1$s</string>
+    <string name="note_save_failed">Die Notiz konnte nicht gespeichert werden.</string>
 </resources>

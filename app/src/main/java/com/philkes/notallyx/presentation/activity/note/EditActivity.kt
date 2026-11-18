@@ -61,6 +61,7 @@ import com.philkes.notallyx.presentation.setupProgressDialog
 import com.philkes.notallyx.presentation.setupReminderChip
 import com.philkes.notallyx.presentation.showKeyboard
 import com.philkes.notallyx.presentation.view.note.ErrorAdapter
+import com.philkes.notallyx.presentation.view.note.action.Action
 import com.philkes.notallyx.presentation.view.note.action.ActionSelectionBottomSheet
 import com.philkes.notallyx.presentation.view.note.action.AddBottomSheet
 import com.philkes.notallyx.presentation.view.note.action.MoreNoteBottomSheet
@@ -456,7 +457,7 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
 
     private var navigationIconBeforeSearch: Drawable? = null
 
-    fun startSearch() {
+    open fun startSearch() {
         binding.Toolbar.apply {
             menu.clear()
             search.nextMenuItem =
@@ -515,7 +516,7 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
         }
     }
 
-    protected fun endSearch() {
+    protected open fun endSearch() {
         binding.EnterSearchKeyword.apply {
             visibility = GONE
             setText("")
@@ -623,9 +624,18 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
         val topActions = preferences.getSafeEditNoteActivityTopActions()
         val bottomAction = preferences.editNoteActivityBottomAction.value
 
-        MoreNoteBottomSheet(notallyModel, colorInt, actionHandler, topActions, bottomAction)
+        MoreNoteBottomSheet(
+                notallyModel,
+                colorInt,
+                actionHandler,
+                topActions,
+                bottomAction,
+                extraNoteActions(),
+            )
             .show(supportFragmentManager, MoreNoteBottomSheet.TAG)
     }
+
+    protected open fun extraNoteActions(): List<Action> = emptyList()
 
     private fun updateBottomActions(bottomAction: EditAction) {
         binding.BottomAppBarRight.apply {
@@ -777,6 +787,13 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
     private fun handleSharedNote() {
         val baseNote = intent.generateBaseNote(this)
         notallyModel.apply {
+            if (
+                intent.type == "text/markdown" ||
+                    (intent.action == Intent.ACTION_VIEW &&
+                        baseNote.title.endsWith(".md", ignoreCase = true))
+            ) {
+                format = com.philkes.notallyx.data.model.NoteFormat.MARKDOWN
+            }
             body =
                 Editable.Factory.getInstance().newEditable(baseNote.text).apply {
                     findWebUrls().forEach { (urlStart, urlEnd) ->
@@ -1002,6 +1019,7 @@ abstract class EditActivity(private val type: Type) : LockedActivity<ActivityEdi
         binding.EnterTitle.setTextSizeSp(notallyModel.textSize.editTitleSize)
         binding.Date.setTextSizeSp(notallyModel.textSize.displaySmallerSize)
         binding.EnterBody.setTextSizeSp(notallyModel.textSize.editBodySize)
+        binding.MarkdownPreview.setTextSizeSp(notallyModel.textSize.editBodySize)
 
         setupImages()
         setupFiles()

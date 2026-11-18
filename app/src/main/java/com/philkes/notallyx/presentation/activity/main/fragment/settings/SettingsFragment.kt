@@ -403,15 +403,15 @@ class SettingsFragment : Fragment() {
             }
 
             launch {
-                widgetMarkdown.flow.collect { value ->
-                    binding.WidgetMarkdown.setup(
-                        widgetMarkdown,
+                newNotesUseMarkdown.flow.collect { value ->
+                    binding.NewNotesUseMarkdown.setup(
+                        newNotesUseMarkdown,
                         value,
                         requireContext(),
                         layoutInflater,
-                        R.string.widget_markdown_description,
+                        R.string.new_notes_use_markdown_description,
                     ) { enabled ->
-                        model.savePreference(widgetMarkdown, enabled)
+                        model.savePreference(newNotesUseMarkdown, enabled)
                     }
                 }
             }
