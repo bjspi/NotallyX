@@ -109,7 +109,7 @@ class WidgetNoteFormattingTest {
 
             val widget = render(activity, note.copy(format = NoteFormat.MARKDOWN))
             val body = widget.findViewById<TextView>(R.id.Note).text as Spanned
-            assertTrue(body.startsWith("Markdown\nDetails\nBold, italic, old and code."))
+            assertTrue(body.startsWith("Markdown\n\nDetails\n\nBold, italic, old and code."))
             assertTrue(body.contains("3. Third\n4. Fourth"))
             assertTrue(body.contains("x\n\u00a0\u00a0y"))
             assertTrue(body.endsWith("Image caption"))

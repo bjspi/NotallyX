@@ -148,7 +148,7 @@ class ScreenshotTests {
 
     @Test
     fun markdownNoteUsesTheSavedFormatAndRendersUntilEditing() = runTest {
-        val source = "# A heading\n\n**Body**"
+        val source = "# A heading\n**Body**"
         val noteId =
             withContext(Dispatchers.IO) {
                 database.getBaseNoteDao().insert(createBaseNote(title = "Example", body = source))

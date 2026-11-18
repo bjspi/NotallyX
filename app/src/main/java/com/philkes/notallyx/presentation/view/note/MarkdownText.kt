@@ -8,23 +8,31 @@ import com.philkes.notallyx.data.model.NoteFormat
 import com.philkes.notallyx.presentation.applySpans
 import com.philkes.notallyx.presentation.dp
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+import org.commonmark.node.BlockQuote
 import org.commonmark.node.BulletList
 import org.commonmark.node.Code
+import org.commonmark.node.Document
 import org.commonmark.node.FencedCodeBlock
 import org.commonmark.node.Image
 import org.commonmark.node.IndentedCodeBlock
 import org.commonmark.node.ListBlock
 import org.commonmark.node.ListItem
+import org.commonmark.node.Node
 import org.commonmark.node.OrderedList
 import org.commonmark.node.Paragraph
 import org.commonmark.node.ThematicBreak
+import org.commonmark.parser.IncludeSourceSpans
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.CoreHtmlNodeRenderer
 import org.commonmark.renderer.html.HtmlNodeRendererContext
 import org.commonmark.renderer.html.HtmlRenderer
 
 private val markdownExtensions = listOf(StrikethroughExtension.create())
-private val markdownParser = Parser.builder().extensions(markdownExtensions).build()
+private val markdownParser =
+    Parser.builder()
+        .extensions(markdownExtensions)
+        .includeSourceSpans(IncludeSourceSpans.BLOCKS)
+        .build()
 private val markdownRenderer =
     HtmlRenderer.builder()
         .extensions(markdownExtensions)
@@ -71,6 +79,30 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
     private var itemNumber: Int? = null
     private var listDepth = -1
 
+    override fun visit(document: Document) = renderBlocks(document.firstChild)
+
+    override fun visit(quote: BlockQuote) {
+        writer.tag("blockquote")
+        renderBlocks(quote.firstChild)
+        writer.tag("/blockquote")
+    }
+
+    private fun renderBlocks(first: Node?, precedingLine: Int? = null) {
+        var previousLine = precedingLine
+        generateSequence(first) { it.next }
+            .forEach { block ->
+                val spans = block.sourceSpans
+                val firstLine = spans.firstOrNull()?.lineIndex
+                val end = previousLine
+                if (firstLine != null && end != null) {
+                    // HtmlCompat supplies one newline between adjacent blocks in compact mode.
+                    repeat((firstLine - end - 1).coerceAtLeast(0)) { writer.raw("<br />") }
+                }
+                context.render(block)
+                previousLine = spans.lastOrNull()?.lineIndex ?: previousLine
+            }
+    }
+
     override fun visit(code: Code) {
         writer.tag("tt")
         writer.text(code.literal.replace(' ', '\u00a0'))
@@ -106,7 +138,7 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
         val outerItemNumber = itemNumber
         itemNumber = firstNumber
         listDepth++
-        visitChildren(list)
+        renderBlocks(list.firstChild)
         listDepth--
         itemNumber = outerItemNumber
     }
@@ -127,6 +159,6 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
         writer.tag("/div")
 
         val remaining = if (first is Paragraph) first.next else first
-        generateSequence(remaining) { it.next }.forEach(context::render)
+        renderBlocks(remaining, (first as? Paragraph)?.sourceSpans?.lastOrNull()?.lineIndex)
     }
 }
