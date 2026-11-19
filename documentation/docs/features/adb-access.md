@@ -36,4 +36,12 @@ Download an attachment by note ID, category and stored name. Use `localName` fro
 adb exec-out content read --uri content://com.philkes.notallyx.debug.adb/notes/42/attachments/audios/NAME.m4a > recording.m4a
 ```
 
-Use PowerShell 7.4 or later, cmd.exe, or a POSIX shell for the binary redirection in this example.
+Download a fresh NotallyX backup ZIP containing a SQLite snapshot and available attachments.
+The ZIP also contains the original UTF-8 source of each Markdown note under `markdown/`. Filenames use the note title and add a number when titles have the same filename. Untitled notes use `Note-<id>.md`.
+The export uses the configured backup password, if set. ZIP filenames remain visible in password-protected archives.
+
+```sh
+adb exec-out content read --uri content://com.philkes.notallyx.debug.adb/backup.zip > NotallyX_Backup.zip
+```
+
+Use PowerShell 7.4 or later, cmd.exe, or a POSIX shell for binary redirection.

@@ -34,6 +34,8 @@ import com.philkes.notallyx.data.NotallyDatabase.Companion.DATABASE_NAME
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Converters
 import com.philkes.notallyx.data.model.FileAttachment
+import com.philkes.notallyx.data.model.NoteFormat
+import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.data.model.toHtml
 import com.philkes.notallyx.data.model.toJson
 import com.philkes.notallyx.data.model.toMarkdown
@@ -68,10 +70,10 @@ import com.philkes.notallyx.utils.getLogFileUri
 import com.philkes.notallyx.utils.keepOnlyNewest
 import com.philkes.notallyx.utils.listZipFiles
 import com.philkes.notallyx.utils.log
-import com.philkes.notallyx.utils.sha256Hash
 import com.philkes.notallyx.utils.resolveAttachmentFile
 import com.philkes.notallyx.utils.security.decryptDatabase
 import com.philkes.notallyx.utils.security.getInitializedCipherForDecryption
+import com.philkes.notallyx.utils.sha256Hash
 import com.philkes.notallyx.utils.verify
 import com.philkes.notallyx.utils.wrapWithChooser
 import java.io.File
@@ -80,6 +82,9 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStreamWriter
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.text.Normalizer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -599,9 +604,11 @@ suspend fun ContextWrapper.exportAsZip(
     password: String = PASSWORD_EMPTY,
     backupProgress: MutableStateFlow<Progress?>? = null,
     retryOnFail: Boolean = true,
+    includeMarkdownFiles: Boolean = false,
 ): NotesAndAttachments {
     backupProgress?.value = BackupProgress(indeterminate = true)
     val tempFile = createTempFile("export", "tmp", cacheDir)
+    var temporaryDatabase: File? = null
     try {
         val isEncrypted = isBackupPasswordSet(password)
         val zipFile = ZipFile(tempFile, if (isEncrypted) password.toCharArray() else null)
@@ -617,7 +624,11 @@ suspend fun ContextWrapper.exportAsZip(
             }
 
         val (databaseOriginal, databaseCopy) = copyDatabase()
+        temporaryDatabase = databaseCopy
         zipFile.addFile(databaseCopy, zipParameters.copy(DATABASE_NAME))
+        if (includeMarkdownFiles) {
+            zipFile.addMarkdownNotes(databaseCopy, zipParameters)
+        }
 
         val totalNotes = databaseOriginal.getBaseNoteDao().count()
         val images = databaseOriginal.getBaseNoteDao().getAllImages().toFileAttachments()
@@ -688,7 +699,14 @@ suspend fun ContextWrapper.exportAsZip(
             if (retryOnFail) {
                 zipFile.file.delete()
                 log(TAG, stackTrace = "Retrying to export ZIP to $fileUri...")
-                return exportAsZip(fileUri, compress, password, backupProgress, false)
+                return exportAsZip(
+                    fileUri,
+                    compress,
+                    password,
+                    backupProgress,
+                    retryOnFail = false,
+                    includeMarkdownFiles = includeMarkdownFiles,
+                )
             } else {
                 throw IOException(
                     "exportAsZip failed because created '${zipFile.file}' is not a valid ZIP!"
@@ -721,7 +739,14 @@ suspend fun ContextWrapper.exportAsZip(
                 }
                 zipFile.file.delete()
                 log(TAG, stackTrace = "Retrying to export ZIP to $fileUri...")
-                return exportAsZip(fileUri, compress, password, backupProgress, false)
+                return exportAsZip(
+                    fileUri,
+                    compress,
+                    password,
+                    backupProgress,
+                    retryOnFail = false,
+                    includeMarkdownFiles = includeMarkdownFiles,
+                )
             } else {
                 throw IOException(
                     "exportAsZip failed because created '$fileUri' has wrong or unverifiable SHA-256 hash!"
@@ -729,15 +754,7 @@ suspend fun ContextWrapper.exportAsZip(
             }
         }
         zipFile.file.delete()
-        try {
-            databaseCopy.delete()
-        } catch (e: Exception) {
-            log(
-                TAG,
-                msg = "Failed to delete db copy file: '${databaseCopy.absolutePath}'",
-                throwable = e,
-            )
-        }
+
         backupProgress?.value = BackupProgress(inProgress = false)
         // Post skipped attachments notification if any were missing
         if (missingAttachments.isNotEmpty()) {
@@ -745,8 +762,60 @@ suspend fun ContextWrapper.exportAsZip(
         }
         return Pair(totalNotes, totalAttachments)
     } finally {
+        try {
+            temporaryDatabase?.delete()
+        } catch (e: SecurityException) {
+            log(TAG, msg = "Failed to delete temporary backup database", throwable = e)
+        }
         tempFile.delete()
     }
+}
+
+private fun ZipFile.addMarkdownNotes(databaseFile: File, parameters: ZipParameters) {
+    val usedNames = mutableSetOf<String>()
+    SQLiteDatabase.openDatabase(databaseFile.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+        db.rawQuery(
+                "SELECT id, title, CAST(body AS BLOB) FROM BaseNote WHERE type = ? AND format = ? ORDER BY id",
+                arrayOf(Type.NOTE.name, NoteFormat.MARKDOWN.name),
+            )
+            .use { notes ->
+                while (notes.moveToNext()) {
+                    val name =
+                        markdownBackupFileName(notes.getString(1), notes.getLong(0), usedNames)
+                    addStream(notes.getBlob(2).inputStream(), parameters.copy("markdown/$name"))
+                }
+            }
+    }
+}
+
+private val invalidMarkdownFilenameChars = Regex("""[<>:"/\\|?*\p{Cc}]""")
+private val windowsDeviceName =
+    Regex("""CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³]""", RegexOption.IGNORE_CASE)
+
+internal fun markdownBackupFileName(
+    title: String,
+    id: Long,
+    usedNames: MutableSet<String>,
+): String {
+    val name =
+        Normalizer.normalize(title, Normalizer.Form.NFC)
+            .replace(invalidMarkdownFilenameChars, "_")
+            .trim { it.isWhitespace() || it == '.' }
+    val stem = if (name.endsWith(".md", ignoreCase = true)) name.dropLast(3) else name
+    val input = CharBuffer.wrap(stem)
+    // Leave room for the suffix and extension within a 255-byte filename.
+    Charsets.UTF_8.newEncoder().encode(input, ByteBuffer.allocate(220), true)
+    val shortened = stem.take(input.position()).trimEnd { it.isWhitespace() || it == '.' }
+    val usable = shortened.ifEmpty { "Note-$id" }
+    val base =
+        if (windowsDeviceName.matches(usable.substringBefore('.').trimEnd())) "_$usable" else usable
+    var filename = "$base.md"
+    var suffix = 1
+    while (!usedNames.add(filename.lowercase(Locale.ROOT))) {
+        suffix++
+        filename = "$base ($suffix).md"
+    }
+    return filename
 }
 
 suspend fun ContextWrapper.copyDatabase(

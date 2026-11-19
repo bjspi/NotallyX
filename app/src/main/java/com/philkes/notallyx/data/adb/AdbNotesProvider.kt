@@ -18,6 +18,7 @@ import com.philkes.notallyx.presentation.widget.WidgetProvider
 import com.philkes.notallyx.utils.SUBFOLDER_AUDIOS
 import com.philkes.notallyx.utils.SUBFOLDER_FILES
 import com.philkes.notallyx.utils.SUBFOLDER_IMAGES
+import com.philkes.notallyx.utils.backup.exportAsZip
 import com.philkes.notallyx.utils.onNoteSaved
 import com.philkes.notallyx.utils.resolveAttachmentFile
 import java.io.File
@@ -101,7 +102,28 @@ class AdbNotesProvider : ContentProvider() {
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         val app = requireAccess()
         val path = uri.pathSegments
-        if (mode != "r" || path.firstOrNull() != "notes") {
+        if (mode != "r") {
+            throw FileNotFoundException()
+        }
+        if (path.size == 1 && path[0] == "backup.zip") {
+            return runBlocking(Dispatchers.IO) {
+                getDatabase(app)
+                val snapshot = File.createTempFile("adb-backup-", ".zip", app.cacheDir)
+                try {
+                    val password = NotallyXPreferences.getInstance(app).backupPassword.value
+                    app.exportAsZip(
+                        Uri.fromFile(snapshot),
+                        password = password,
+                        includeMarkdownFiles = true,
+                    )
+                    ParcelFileDescriptor.open(snapshot, ParcelFileDescriptor.MODE_READ_ONLY)
+                } finally {
+                    // The open descriptor keeps the snapshot readable after unlinking.
+                    snapshot.delete()
+                }
+            }
+        }
+        if (path.firstOrNull() != "notes") {
             throw FileNotFoundException()
         }
         if (path.size == 3 && path[2] == "markdown") {

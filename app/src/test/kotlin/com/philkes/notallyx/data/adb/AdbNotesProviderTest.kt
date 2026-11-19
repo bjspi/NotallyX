@@ -18,6 +18,7 @@ import com.philkes.notallyx.test.database
 import com.philkes.notallyx.test.preferences
 import com.philkes.notallyx.utils.getCurrentAudioDirectory
 import java.io.File
+import java.io.FileNotFoundException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -36,6 +37,7 @@ import org.robolectric.shadows.ShadowBinder
 class AdbNotesProviderTest {
     private val authority = "${app.packageName}.adb"
     private val notes = Uri.parse("content://$authority/notes")
+    private val backup = Uri.parse("content://$authority/backup.zip")
     private val provider =
         Robolectric.buildContentProvider(AdbNotesProvider::class.java).create(authority).get()
 
@@ -68,6 +70,23 @@ class AdbNotesProviderTest {
 
         app.locked.value = false
         provider.query(notes, null, null, null, null).use { assertEquals(5, it.columnCount) }
+    }
+
+    @Test
+    fun backupRequiresShellOptInAnUnlockedAppAndReadMode() {
+        ShadowBinder.setCallingUid(2000)
+        assertThrows(SecurityException::class.java) { provider.openFile(backup, "r") }
+
+        preferences.adbAccess.save(true)
+        ShadowBinder.setCallingUid(10000)
+        assertThrows(SecurityException::class.java) { provider.openFile(backup, "r") }
+
+        ShadowBinder.setCallingUid(2000)
+        preferences.biometricLock.save(BiometricLock.ENABLED)
+        assertThrows(SecurityException::class.java) { provider.openFile(backup, "r") }
+
+        app.locked.value = false
+        assertThrows(FileNotFoundException::class.java) { provider.openFile(backup, "rw") }
     }
 
     @Test
