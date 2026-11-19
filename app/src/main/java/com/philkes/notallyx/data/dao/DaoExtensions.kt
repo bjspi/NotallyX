@@ -2,6 +2,7 @@ package com.philkes.notallyx.data.dao
 
 import android.content.Context
 import com.philkes.notallyx.data.model.Folder
+import com.philkes.notallyx.presentation.widget.WidgetProvider
 import com.philkes.notallyx.utils.cancelPinAndReminders
 import com.philkes.notallyx.utils.pinAndScheduleReminders
 
@@ -18,4 +19,5 @@ suspend fun Context.moveBaseNotes(baseNoteDao: BaseNoteDao, ids: LongArray, fold
         Folder.NOTES -> pinAndScheduleReminders(notes)
         else -> cancelPinAndReminders(notes)
     }
+    WidgetProvider.sendBroadcast(this, ids)
 }

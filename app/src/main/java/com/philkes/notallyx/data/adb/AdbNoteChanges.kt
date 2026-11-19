@@ -5,7 +5,10 @@ import android.util.Base64
 import com.philkes.notallyx.data.dao.BaseNoteDao
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.Converters
+import com.philkes.notallyx.data.model.Folder
+import com.philkes.notallyx.data.model.ListItem
 import com.philkes.notallyx.data.model.NoteFormat
+import com.philkes.notallyx.data.model.NoteViewMode
 import com.philkes.notallyx.data.model.Type
 import org.json.JSONArray
 import org.json.JSONException
@@ -30,6 +33,37 @@ internal class AdbNoteChanges(input: ContentValues) {
         }
     private val spans = values.getAsString("spans")
     private val items = values.getAsString("items")
+
+    /**
+     * Builds a new note in the notes folder: a checklist when items are given, otherwise a text
+     * note, in Markdown unless another format is given.
+     */
+    fun createNote(): BaseNote {
+        val now = System.currentTimeMillis()
+        val template =
+            BaseNote(
+                id = 0,
+                type = if (items != null) Type.LIST else Type.NOTE,
+                folder = Folder.NOTES,
+                color = BaseNote.COLOR_DEFAULT,
+                title = "",
+                pinned = false,
+                timestamp = now,
+                modifiedTimestamp = now,
+                labels = emptyList(),
+                body = "",
+                spans = emptyList(),
+                items = emptyList(),
+                images = emptyList(),
+                files = emptyList(),
+                audios = emptyList(),
+                reminders = emptyList(),
+                viewMode = NoteViewMode.EDIT,
+                isPinnedToStatus = false,
+                format = if (items != null) NoteFormat.TEXT else NoteFormat.MARKDOWN,
+            )
+        return applyTo(template).copy(modifiedTimestamp = now)
+    }
 
     fun applyTo(note: BaseNote): BaseNote {
         require(note.type == Type.NOTE || (body == null && spans == null && format == null)) {
@@ -67,11 +101,13 @@ internal class AdbNoteChanges(input: ContentValues) {
                         if (item.has("checked")) item.getBoolean("checked")
                         if (item.has("isChild")) item.getBoolean("isChild")
                     }
-                    Converters.jsonToItems(array).also { parsed ->
-                        require(parsed.firstOrNull()?.isChild != true) {
-                            "Checklist starts with a child item"
+                    Converters.jsonToItems(array)
+                        .also { parsed ->
+                            require(parsed.firstOrNull()?.isChild != true) {
+                                "Checklist starts with a child item"
+                            }
                         }
-                    }
+                        .withArrayOrder()
                 }
             } ?: note.items
         return note.copy(
@@ -84,10 +120,24 @@ internal class AdbNoteChanges(input: ContentValues) {
         )
     }
 
+    /**
+     * Keeps the given orders while they still ascend along the array, otherwise the array position
+     * wins, so moved or newly added items do not carry stale or duplicate orders from a template.
+     */
+    private fun List<ListItem>.withArrayOrder(): List<ListItem> {
+        val orders = map { it.order }
+        val ascending = orders.zipWithNext().all { (a, b) -> a != null && b != null && a < b }
+        return if (ascending && orders.firstOrNull() != null) this
+        else mapIndexed { index, item -> item.copy(order = index) }
+    }
+
     private fun <T> parseArray(json: String, parse: (JSONArray) -> T): T =
         try {
             parse(JSONArray(json))
         } catch (e: JSONException) {
+            throw IllegalArgumentException("Invalid JSON array", e)
+        } catch (e: ClassCastException) {
+            // Converters cast array entries unchecked, e.g. for "spans":[1]
             throw IllegalArgumentException("Invalid JSON array", e)
         }
 

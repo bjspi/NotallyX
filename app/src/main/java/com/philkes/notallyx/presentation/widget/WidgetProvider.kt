@@ -55,7 +55,17 @@ class WidgetProvider : AppWidgetProvider() {
                 val app = context.applicationContext as NotallyXApplication
                 val preferences = NotallyXPreferences.getInstance(app)
                 val noteIds = intent.getLongArrayExtra(EXTRA_MODIFIED_NOTES)
-                if (noteIds != null) {
+                // A language change or a bulk edit affects every widget, not just a few notes
+                if (
+                    noteIds == null &&
+                        (intent.action == Intent.ACTION_LOCALE_CHANGED ||
+                            intent.getBooleanExtra(EXTRA_ALL_NOTES_MODIFIED, false))
+                ) {
+                    updateWidgets(
+                        context,
+                        locked = preferences.isLockEnabled && app.locked.value,
+                    )
+                } else if (noteIds != null) {
                     updateWidgets(
                         context,
                         noteIds,
@@ -370,6 +380,18 @@ class WidgetProvider : AppWidgetProvider() {
                             0,
                             0,
                         )
+                        val recording =
+                            AudioRecordService.widgetRecording?.takeIf {
+                                it.widgetId == id && !it.saving
+                            }
+                        setViewVisibility(
+                            R.id.WidgetLockedStop,
+                            if (recording == null) View.GONE else View.VISIBLE,
+                        )
+                        setOnClickPendingIntent(
+                            R.id.WidgetLockedStop,
+                            recording?.stopIntent(context),
+                        )
                     }
                 manager.updateAppWidget(id, view)
             }
@@ -453,10 +475,12 @@ class WidgetProvider : AppWidgetProvider() {
             noteId: Long?,
             session: AudioRecordService.WidgetRecording? = AudioRecordService.widgetRecording,
         ) {
-            val recording = session?.takeIf { it.widgetId == widgetId }
+            val ownSession = session?.takeIf { it.widgetId == widgetId }
+            // While the stopped recording is being attached, neither Stop nor Discard applies
+            val recording = ownSession?.takeUnless { it.saving }
             setViewVisibility(
                 R.id.WidgetControls,
-                if (noteId == null && recording == null) View.GONE else View.VISIBLE,
+                if (noteId == null && ownSession == null) View.GONE else View.VISIBLE,
             )
             setViewVisibility(
                 R.id.WidgetRecordingTimer,
@@ -482,7 +506,9 @@ class WidgetProvider : AppWidgetProvider() {
                     R.id.WidgetVoice,
                     context.getString(R.string.widget_voice_plus),
                 )
-                if (noteId != null) {
+                if (ownSession != null) {
+                    setOnClickPendingIntent(R.id.WidgetVoice, null)
+                } else if (noteId != null) {
                     setOnClickPendingIntent(
                         R.id.WidgetVoice,
                         PendingIntent.getActivity(
@@ -591,6 +617,15 @@ class WidgetProvider : AppWidgetProvider() {
                 context.sendBroadcast(this)
             }
 
+        /** Refreshes every widget, for changes whose affected note ids are unknown. */
+        fun sendBroadcastAll(context: Context) =
+            Intent(context, WidgetProvider::class.java).apply {
+                action = ACTION_NOTES_MODIFIED
+                putExtra(EXTRA_ALL_NOTES_MODIFIED, true)
+                context.sendBroadcast(this)
+            }
+
+        private const val EXTRA_ALL_NOTES_MODIFIED = "com.philkes.notallyx.EXTRA_ALL_NOTES_MODIFIED"
         private const val EXTRA_MODIFIED_NOTES = "com.philkes.notallyx.EXTRA_MODIFIED_NOTES"
         private const val ACTION_NOTES_MODIFIED = "com.philkes.notallyx.ACTION_NOTE_MODIFIED"
         private const val EXTRA_PICKER_NOTE = "com.philkes.notallyx.EXTRA_PICKER_NOTE"

@@ -49,9 +49,13 @@ class AudioRecordService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START_WIDGET -> startWidgetRecording(intent)
-            ACTION_STOP_WIDGET -> stopWidgetRecording(intent.getLongExtra(EXTRA_STARTED_AT, -1))
+            ACTION_STOP_WIDGET ->
+                stopWidgetRecording(intent.getLongExtra(EXTRA_STARTED_AT, -1), intent.widgetId())
             ACTION_DISCARD_WIDGET ->
-                discardWidgetRecording(intent.getLongExtra(EXTRA_STARTED_AT, -1))
+                discardWidgetRecording(
+                    intent.getLongExtra(EXTRA_STARTED_AT, -1),
+                    intent.widgetId(),
+                )
             else -> {
                 if (recorder == null && widgetRecording == null) {
                     prepareEditorRecording()
@@ -61,12 +65,24 @@ class AudioRecordService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun discardWidgetRecording(startedAt: Long) {
-        if (widgetRecording?.startedAt == startedAt && status.value == RECORDING) {
+    private fun discardWidgetRecording(startedAt: Long, widgetId: Int) {
+        val session = widgetRecording
+        if (session?.startedAt == startedAt && !session.saving && status.value == RECORDING) {
             finishWidgetRecording()
-        } else if (widgetRecording == null && recorder == null) {
-            stopSelf()
+        } else if (session == null) {
+            refreshStaleWidget(widgetId)
         }
+    }
+
+    /**
+     * Redraws a widget whose recording controls outlived their session, e.g. after the process was
+     * killed mid-recording, and stops this otherwise idle service.
+     */
+    private fun refreshStaleWidget(widgetId: Int) {
+        if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+            WidgetProvider.refreshRecordingWidget(this, widgetId)
+        }
+        if (recorder == null) stopSelf()
     }
 
     private fun prepareEditorRecording() {
@@ -154,11 +170,7 @@ class AudioRecordService : Service() {
             result?.send(WIDGET_BUSY, null)
             return
         }
-        val widgetId =
-            intent.getIntExtra(
-                AppWidgetManager.EXTRA_APPWIDGET_ID,
-                AppWidgetManager.INVALID_APPWIDGET_ID,
-            )
+        val widgetId = intent.widgetId()
         val noteId = intent.getLongExtra(EXTRA_SELECTED_BASE_NOTE, 0)
         val app = application as NotallyXApplication
         val preferences = NotallyXPreferences.getInstance(app)
@@ -172,7 +184,8 @@ class AudioRecordService : Service() {
             return
         }
         try {
-            val file = File.createTempFile("widget-recording-", ".m4a", cacheDir)
+            deleteOrphanedWidgetRecordings()
+            val file = File.createTempFile(WIDGET_FILE_PREFIX, ".m4a", cacheDir)
             widgetFile = file
             prepare(file)
             checkNotNull(recorder).setOnErrorListener { _, what, extra ->
@@ -233,13 +246,20 @@ class AudioRecordService : Service() {
         finishWidgetRecording()
     }
 
-    private fun stopWidgetRecording(startedAt: Long) {
+    /** Removes partial recordings left behind when the process died mid-recording. */
+    private fun deleteOrphanedWidgetRecordings() {
+        cacheDir
+            .listFiles { file -> file.name.startsWith(WIDGET_FILE_PREFIX) }
+            ?.forEach { it.delete() }
+    }
+
+    private fun stopWidgetRecording(startedAt: Long, widgetId: Int) {
         val session = widgetRecording
         if (session == null) {
-            if (recorder == null) stopSelf()
+            refreshStaleWidget(widgetId)
             return
         }
-        if (session.startedAt != startedAt || status.value != RECORDING) return
+        if (session.startedAt != startedAt || session.saving || status.value != RECORDING) return
         try {
             checkNotNull(recorder).stop()
         } catch (e: RuntimeException) {
@@ -250,6 +270,8 @@ class AudioRecordService : Service() {
         }
         releaseRecorder()
         status.value = Status.READY
+        widgetRecording = session.copy(saving = true)
+        WidgetProvider.refreshRecordingWidget(this, session.widgetId)
         val file = checkNotNull(widgetFile)
         scope.launch {
             try {
@@ -286,7 +308,13 @@ class AudioRecordService : Service() {
         WidgetProvider.refreshRecordingWidget(this, recording.widgetId)
     }
 
-    internal data class WidgetRecording(val widgetId: Int, val noteId: Long, val startedAt: Long) {
+    /** @property saving `true` once the recording was stopped and is being attached. */
+    internal data class WidgetRecording(
+        val widgetId: Int,
+        val noteId: Long,
+        val startedAt: Long,
+        val saving: Boolean = false,
+    ) {
         fun stopIntent(context: Context): PendingIntent =
             PendingIntent.getService(
                 context,
@@ -294,6 +322,7 @@ class AudioRecordService : Service() {
                 Intent(context, AudioRecordService::class.java).apply {
                     action = ACTION_STOP_WIDGET
                     data = Uri.fromParts("notallyx-recording", startedAt.toString(), null)
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
                     putExtra(EXTRA_STARTED_AT, startedAt)
                 },
                 PendingIntent.FLAG_IMMUTABLE,
@@ -310,6 +339,7 @@ class AudioRecordService : Service() {
         private const val EXTRA_STARTED_AT = "recordingStartedAt"
         private const val RECORDING_NOTIFICATION_ID = 10101
         private const val RECORDING_CHANNEL = "widget_recording"
+        private const val WIDGET_FILE_PREFIX = "widget-recording-"
 
         internal const val WIDGET_STARTED = 1
         internal const val WIDGET_BUSY = 2
@@ -318,11 +348,15 @@ class AudioRecordService : Service() {
         internal var widgetRecording: WidgetRecording? = null
             private set
 
-        internal fun widgetDiscardIntent(context: Context, startedAt: Long): Intent =
+        internal fun widgetDiscardIntent(context: Context, widgetId: Int, startedAt: Long): Intent =
             Intent(context, AudioRecordService::class.java).apply {
                 action = ACTION_DISCARD_WIDGET
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
                 putExtra(EXTRA_STARTED_AT, startedAt)
             }
+
+        private fun Intent.widgetId() =
+            getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
 
         internal fun widgetStartIntent(
             context: Context,

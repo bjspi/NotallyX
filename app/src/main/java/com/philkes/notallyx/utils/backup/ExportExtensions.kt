@@ -627,7 +627,7 @@ suspend fun ContextWrapper.exportAsZip(
         temporaryDatabase = databaseCopy
         zipFile.addFile(databaseCopy, zipParameters.copy(DATABASE_NAME))
         if (includeMarkdownFiles) {
-            zipFile.addMarkdownNotes(databaseCopy, zipParameters)
+            zipFile.addMarkdownNotes(databaseCopy, zipParameters, hideTitles = isEncrypted)
         }
 
         val totalNotes = databaseOriginal.getBaseNoteDao().count()
@@ -771,7 +771,12 @@ suspend fun ContextWrapper.exportAsZip(
     }
 }
 
-private fun ZipFile.addMarkdownNotes(databaseFile: File, parameters: ZipParameters) {
+/** @param hideTitles names entries by note ID, since ZIP encryption leaves entry names readable */
+private fun ZipFile.addMarkdownNotes(
+    databaseFile: File,
+    parameters: ZipParameters,
+    hideTitles: Boolean,
+) {
     val usedNames = mutableSetOf<String>()
     SQLiteDatabase.openDatabase(databaseFile.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
         db.rawQuery(
@@ -780,8 +785,8 @@ private fun ZipFile.addMarkdownNotes(databaseFile: File, parameters: ZipParamete
             )
             .use { notes ->
                 while (notes.moveToNext()) {
-                    val name =
-                        markdownBackupFileName(notes.getString(1), notes.getLong(0), usedNames)
+                    val title = if (hideTitles) "" else notes.getString(1)
+                    val name = markdownBackupFileName(title, notes.getLong(0), usedNames)
                     addStream(notes.getBlob(2).inputStream(), parameters.copy("markdown/$name"))
                 }
             }

@@ -9,4 +9,6 @@
     <string name="note_save_failed">Could not save the note.</string>
     <string name="lined_notes">Lined notes</string>
     <string name="lined_notes_description">Show horizontal lines under each line of text in an opened note.</string>
+    <string name="markdown_blank_line_height">Blank line height in Markdown (%)</string>
+    <string name="markdown_blank_line_height_description">Height of blank lines in Markdown previews, the overview and widgets, relative to a text line. 0 hides blank lines.</string>
 </resources>

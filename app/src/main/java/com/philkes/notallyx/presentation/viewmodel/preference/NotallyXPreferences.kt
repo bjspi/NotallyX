@@ -48,6 +48,16 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
     val newNotesUseMarkdown =
         BooleanPreference("widgetMarkdown", preferences, false, R.string.new_notes_use_markdown)
     val linedNotes = BooleanPreference("linedNotes", preferences, false, R.string.lined_notes)
+    /** Height of blank lines in rendered Markdown, in percent of a regular text line. */
+    val markdownBlankLineHeight =
+        IntPreference(
+            "markdownBlankLineHeight",
+            preferences,
+            50,
+            0,
+            100,
+            R.string.markdown_blank_line_height,
+        )
     val dateFormatOverview =
         createEnumPreference(
             preferences,
@@ -363,6 +373,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
                 textSizeOverview,
                 newNotesUseMarkdown,
                 linedNotes,
+                markdownBlankLineHeight,
                 dateFormatOverview,
                 timeFormatOverview,
                 dateFormatNoteView,
@@ -424,3 +435,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
 
 val NotallyXPreferences.autoSortByCheckedEnabled
     get() = listItemSorting.value.isAutoSortChecked
+
+/** Height of blank lines in rendered Markdown relative to a regular text line. */
+val NotallyXPreferences.markdownBlankLineScale: Float
+    get() = markdownBlankLineHeight.value / 100f

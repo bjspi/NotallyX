@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.text.Html
+import android.text.SpannableString
 import android.util.Base64
 import androidx.core.content.IntentCompat
 import androidx.core.text.toHtml
@@ -13,9 +14,9 @@ import com.philkes.notallyx.data.dao.BaseNoteDao.Companion.MAX_BODY_CHAR_LENGTH
 import com.philkes.notallyx.data.dao.NoteIdReminder
 import com.philkes.notallyx.data.imports.markdown.createMarkdownFromBodyAndSpans
 import com.philkes.notallyx.data.model.BaseNote.Companion.COLOR_DEFAULT
-import com.philkes.notallyx.presentation.applySpans
 import com.philkes.notallyx.presentation.getQuantityStringPlain
 import com.philkes.notallyx.presentation.showToast
+import com.philkes.notallyx.presentation.view.note.renderedBody
 import com.philkes.notallyx.presentation.viewmodel.edit.NoteModel
 import com.philkes.notallyx.utils.decodeToBitmap
 import com.philkes.notallyx.utils.getFileName
@@ -241,8 +242,8 @@ fun BaseNote.toHtml(showDateCreated: Boolean, imagesRootFolder: File?) = buildSt
 
     when (type) {
         Type.NOTE -> {
-            val body = body.applySpans(spans).toHtml()
-            append(body)
+            // Markdown notes export their rendered form, not the raw source
+            append(SpannableString(renderedBody()).toHtml())
         }
 
         Type.LIST -> {

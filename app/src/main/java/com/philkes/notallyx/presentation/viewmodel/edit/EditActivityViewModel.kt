@@ -18,6 +18,7 @@ import com.philkes.notallyx.presentation.showToast
 import com.philkes.notallyx.presentation.viewmodel.ExportMimeType
 import com.philkes.notallyx.presentation.viewmodel.executeAsyncWithCallback
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
+import com.philkes.notallyx.presentation.widget.WidgetProvider
 import com.philkes.notallyx.utils.backup.exportPdfFile
 import com.philkes.notallyx.utils.backup.exportPlainTextFile
 import com.philkes.notallyx.utils.log
@@ -99,7 +100,10 @@ class EditActivityViewModel(app: Application, preferences: NotallyXPreferences) 
         if (oldColor == defaultColor) {
             preferences.defaultNoteColor.save(newColor)
         }
-        viewModelScope.launch(Dispatchers.IO) { baseNoteDao?.updateColor(oldColor, newColor) }
+        viewModelScope.launch(Dispatchers.IO) {
+            baseNoteDao?.updateColor(oldColor, newColor)
+            WidgetProvider.sendBroadcastAll(app)
+        }
     }
 
     suspend fun duplicateNote(note: BaseNote) = duplicateNotes(listOf(note)).first()

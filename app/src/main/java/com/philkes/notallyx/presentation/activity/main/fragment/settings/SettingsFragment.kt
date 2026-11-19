@@ -62,6 +62,7 @@ import com.philkes.notallyx.presentation.viewmodel.preference.PeriodicBackup
 import com.philkes.notallyx.presentation.viewmodel.preference.PeriodicBackup.Companion.BACKUP_MAX_MIN
 import com.philkes.notallyx.presentation.viewmodel.preference.PeriodicBackup.Companion.BACKUP_PERIOD_DAYS_MIN
 import com.philkes.notallyx.presentation.viewmodel.preference.PeriodicBackupsPreference
+import com.philkes.notallyx.presentation.widget.WidgetProvider
 import com.philkes.notallyx.scheduleAutoRemoveOldDeletedNotes
 import com.philkes.notallyx.utils.MIME_TYPE_JSON
 import com.philkes.notallyx.utils.MIME_TYPE_ZIP
@@ -426,6 +427,21 @@ class SettingsFragment : Fragment() {
                         R.string.lined_notes_description,
                     ) { value ->
                         model.savePreference(linedNotes, value)
+                    }
+                }
+            }
+
+            launch {
+                markdownBlankLineHeight.flow.collect { value ->
+                    binding.MarkdownBlankLineHeight.setup(
+                        markdownBlankLineHeight,
+                        requireContext(),
+                        value = value,
+                        tooltipResId = R.string.markdown_blank_line_height_description,
+                    ) { newValue ->
+                        model.savePreference(markdownBlankLineHeight, newValue)
+                        // Widgets render Markdown themselves and only redraw when told to
+                        WidgetProvider.sendBroadcastAll(requireContext())
                     }
                 }
             }

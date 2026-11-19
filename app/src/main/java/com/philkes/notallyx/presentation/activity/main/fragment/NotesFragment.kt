@@ -46,6 +46,7 @@ import com.philkes.notallyx.presentation.view.main.createCallback
 import com.philkes.notallyx.presentation.view.misc.ItemListener
 import com.philkes.notallyx.presentation.viewmodel.main.fragment.NotesFragmentViewModel
 import com.philkes.notallyx.presentation.viewmodel.preference.NotesView
+import com.philkes.notallyx.presentation.viewmodel.preference.markdownBlankLineScale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
@@ -276,6 +277,7 @@ abstract class NotesFragment : Fragment(), ItemListener {
                         labelTagsHiddenInOverview.value,
                         imagesHiddenInOverview.value,
                         notesSorting.value.sortedBy,
+                        markdownBlankLineScale,
                     ),
                     model.imageRoot,
                     this@NotesFragment,

@@ -19,8 +19,10 @@ class IOExtensionsTest {
 
     @Test
     fun `sha256Hash returns different digest bytes for modified content`() {
-        val originalDigest = ByteArrayInputStream("original export content".toByteArray()).sha256Hash()
-        val modifiedDigest = ByteArrayInputStream("modified export content".toByteArray()).sha256Hash()
+        val originalDigest =
+            ByteArrayInputStream("original export content".toByteArray()).sha256Hash()
+        val modifiedDigest =
+            ByteArrayInputStream("modified export content".toByteArray()).sha256Hash()
 
         assertFalse(originalDigest.contentEquals(modifiedDigest))
     }

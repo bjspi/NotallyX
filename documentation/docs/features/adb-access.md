@@ -22,6 +22,14 @@ $patch = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 adb shell content update --uri content://com.philkes.notallyx.debug.adb/notes/42 --bind "patch:s:$patch"
 ```
 
+Create a new note with `content insert` on the `notes` URI. It accepts the same fields and `patch` as an update. Without `items`, the note is a text note in Markdown unless you pass `format:s:text`; with `items`, it is a checklist. New notes land in the notes folder and receive the next free ID, which the index shows as its highest ID.
+
+```powershell
+$json = '{"title":"From the PC","body":"# Heading\n\n> A quote\n\n- First item\n- Second item"}'
+$patch = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+adb shell content insert --uri content://com.philkes.notallyx.debug.adb/notes --bind "patch:s:$patch"
+```
+
 Use the JSON arrays returned by the query as templates for `spans` and `items`. Span positions are zero-based UTF-16 offsets with exclusive ends. A body update without spans clears the old rich-text formatting. A format-only update keeps the source and its saved spans. Checklist items are listed in display order, with each child following its parent or sibling.
 
 Download a note as a UTF-8 Markdown file. This preserves the source for a Markdown note and exports existing formatting for text notes and checklists.
@@ -38,7 +46,7 @@ adb exec-out content read --uri content://com.philkes.notallyx.debug.adb/notes/4
 
 Download a fresh NotallyX backup ZIP containing a SQLite snapshot and available attachments.
 The ZIP also contains the original UTF-8 source of each Markdown note under `markdown/`. Filenames use the note title and add a number when titles have the same filename. Untitled notes use `Note-<id>.md`.
-The export uses the configured backup password, if set. ZIP filenames remain visible in password-protected archives.
+The export uses the configured backup password, if set. Because ZIP filenames remain visible in password-protected archives, these exports name every Markdown file `Note-<id>.md` instead of using its title.
 
 ```sh
 adb exec-out content read --uri content://com.philkes.notallyx.debug.adb/backup.zip > NotallyX_Backup.zip

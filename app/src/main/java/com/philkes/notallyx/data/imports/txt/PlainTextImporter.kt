@@ -103,7 +103,7 @@ class PlainTextImporter : ExternalImporter {
     }
 
     companion object {
-        private val MARKDOWN_TASK = Regex("""\s*- \[[ x]\](?:\s.*)?""")
+        private val MARKDOWN_TASK = Regex("""\s*- \[[ xX]\](?:\s.*)?""")
     }
 }
 

@@ -58,6 +58,7 @@ data class BaseNoteVHPreferences(
     val hideLabels: Boolean,
     val hideImages: Boolean,
     val sortedBy: NotesSortBy,
+    val markdownBlankLineScale: Float = 1f,
 )
 
 class BaseNoteVH(
@@ -194,7 +195,10 @@ class BaseNoteVH(
             if (baseNote.format == NoteFormat.MARKDOWN) {
                 if (isVisible || keyword.isNotBlank()) {
                     bodyRenderJob = scope.launch {
-                        val rendered = withContext(Dispatchers.IO) { baseNote.renderedBody() }
+                        val rendered =
+                            withContext(Dispatchers.IO) {
+                                baseNote.renderedBody(preferences.markdownBlankLineScale)
+                            }
                         bindBody(rendered, rendered, keyword)
                     }
                 }

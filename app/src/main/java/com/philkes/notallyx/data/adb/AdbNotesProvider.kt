@@ -23,7 +23,6 @@ import com.philkes.notallyx.utils.onNoteSaved
 import com.philkes.notallyx.utils.resolveAttachmentFile
 import java.io.File
 import java.io.FileNotFoundException
-import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
@@ -134,12 +133,13 @@ class AdbNotesProvider : ContentProvider() {
                             ?: throw FileNotFoundException()
                     note.toMarkdown().toByteArray(Charsets.UTF_8)
                 }
-            return openPipeHelper(uri, "text/markdown", null, bytes) { output, _, _, _, content ->
-                try {
-                    ParcelFileDescriptor.AutoCloseOutputStream(output).use { it.write(content) }
-                } catch (_: IOException) {
-                    // The reader closed the pipe before consuming the whole note.
-                }
+            val snapshot = File.createTempFile("adb-note-", ".md", app.cacheDir)
+            try {
+                snapshot.writeBytes(bytes)
+                return ParcelFileDescriptor.open(snapshot, ParcelFileDescriptor.MODE_READ_ONLY)
+            } finally {
+                // The open descriptor keeps the snapshot readable after unlinking.
+                snapshot.delete()
             }
         }
         if (path.size != 5 || path[2] != "attachments") {
@@ -169,8 +169,19 @@ class AdbNotesProvider : ContentProvider() {
 
     override fun getType(uri: Uri): String? = null
 
-    override fun insert(uri: Uri, values: ContentValues?): Uri =
-        throw UnsupportedOperationException()
+    override fun insert(uri: Uri, values: ContentValues?): Uri {
+        val app = requireAccess()
+        require(uri.pathSegments == listOf("notes")) { "Insert into the notes URI" }
+        val note = AdbNoteChanges(requireNotNull(values)).createNote()
+        return runBlocking(Dispatchers.IO) {
+            val id = getDatabase(app).getBaseNoteDao().insert(note)
+            val created = note.copy(id = id)
+            // Refreshes widgets whose note list is open, so the new note shows up there
+            WidgetProvider.sendBroadcast(app, longArrayOf(id))
+            app.onNoteSaved(NotallyXPreferences.getInstance(app), created, null)
+            Uri.withAppendedPath(uri, id.toString())
+        }
+    }
 
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int =
         throw UnsupportedOperationException()

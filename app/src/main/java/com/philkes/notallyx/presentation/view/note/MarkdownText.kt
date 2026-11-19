@@ -1,7 +1,15 @@
 package com.philkes.notallyx.presentation.view.note
 
+import android.graphics.Typeface
+import android.os.Build
+import android.text.Editable
 import android.text.Spanned
+import android.text.style.BackgroundColorSpan
 import android.text.style.LeadingMarginSpan
+import android.text.style.QuoteSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
 import androidx.core.text.HtmlCompat
 import com.philkes.notallyx.data.model.BaseNote
 import com.philkes.notallyx.data.model.NoteFormat
@@ -20,6 +28,7 @@ import org.commonmark.node.ListItem
 import org.commonmark.node.Node
 import org.commonmark.node.OrderedList
 import org.commonmark.node.Paragraph
+import org.commonmark.node.Text
 import org.commonmark.node.ThematicBreak
 import org.commonmark.parser.IncludeSourceSpans
 import org.commonmark.parser.Parser
@@ -43,18 +52,79 @@ private val markdownRenderer =
         .build()
 
 private const val LIST_INDENT_TAG = "notallylist"
+private const val QUOTE_TAG = "notallyquote"
+private const val CODE_TAG = "notallycode"
+// Faint grey behind code, visible on light and dark backgrounds alike
+private const val CODE_BACKGROUND_COLOR = 0x33888888
+private val TASK_MARKER = Regex("""^\[([ xX])]\s+""")
+private const val BLANK_LINE_TAG = "notallyblank"
+// Neutral half-transparent grey that reads as a subtle accent on light and dark backgrounds
+private const val QUOTE_STRIPE_COLOR = 0x80888888.toInt()
 
-internal fun BaseNote.renderedBody(): CharSequence =
-    if (format == NoteFormat.MARKDOWN) renderMarkdown(body) else body.applySpans(spans)
+/** @param blankLineScale height of blank Markdown lines relative to a regular text line */
+internal fun BaseNote.renderedBody(blankLineScale: Float = 1f): CharSequence =
+    if (format == NoteFormat.MARKDOWN) renderMarkdown(body, blankLineScale)
+    else body.applySpans(spans)
 
-internal fun renderMarkdown(body: String): CharSequence {
+/** @param blankLineScale height of blank lines relative to a regular text line, 0 hides them */
+internal fun renderMarkdown(body: String, blankLineScale: Float = 1f): CharSequence {
     val html = markdownRenderer.render(markdownParser.parse(body))
     var itemStart = 0
+    val quoteStarts = ArrayDeque<Int>()
+    val codeStarts = ArrayDeque<Int>()
     return HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_COMPACT, null) {
             opening,
             tag,
             text,
             _ ->
+            when (tag) {
+                BLANK_LINE_TAG -> {
+                    if (!opening && blankLineScale > 0f) {
+                        val start = text.length
+                        text.append('\n')
+                        if (blankLineScale != 1f) {
+                            text.setSpan(
+                                RelativeSizeSpan(blankLineScale),
+                                start,
+                                text.length,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
+                    }
+                    return@fromHtml
+                }
+                CODE_TAG -> {
+                    if (opening) {
+                        codeStarts.addLast(text.length)
+                    } else {
+                        val start = codeStarts.removeLastOrNull() ?: return@fromHtml
+                        if (text.length > start) {
+                            text.setSpan(
+                                TypefaceSpan("monospace"),
+                                start,
+                                text.length,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                            text.setSpan(
+                                BackgroundColorSpan(CODE_BACKGROUND_COLOR),
+                                start,
+                                text.length,
+                                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
+                    }
+                    return@fromHtml
+                }
+                QUOTE_TAG -> {
+                    if (opening) {
+                        quoteStarts.addLast(text.length)
+                    } else {
+                        val start = quoteStarts.removeLastOrNull() ?: return@fromHtml
+                        if (text.length > start) text.setQuoteSpans(start, text.length)
+                    }
+                    return@fromHtml
+                }
+            }
             if (!tag.startsWith(LIST_INDENT_TAG)) return@fromHtml
             val depth = tag.removePrefix(LIST_INDENT_TAG).toIntOrNull() ?: return@fromHtml
             if (opening) {
@@ -81,10 +151,13 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
 
     override fun visit(document: Document) = renderBlocks(document.firstChild)
 
+    // Rendered as a custom tag: HtmlCompat's blockquote uses the platform's bright blue stripe
     override fun visit(quote: BlockQuote) {
-        writer.tag("blockquote")
+        writer.tag("div")
+        writer.tag(QUOTE_TAG)
         renderBlocks(quote.firstChild)
-        writer.tag("/blockquote")
+        writer.tag("/$QUOTE_TAG")
+        writer.tag("/div")
     }
 
     private fun renderBlocks(first: Node?, precedingLine: Int? = null) {
@@ -96,7 +169,9 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
                 val end = previousLine
                 if (firstLine != null && end != null) {
                     // HtmlCompat supplies one newline between adjacent blocks in compact mode.
-                    repeat((firstLine - end - 1).coerceAtLeast(0)) { writer.raw("<br />") }
+                    repeat((firstLine - end - 1).coerceAtLeast(0)) {
+                        writer.raw("<$BLANK_LINE_TAG></$BLANK_LINE_TAG>")
+                    }
                 }
                 context.render(block)
                 previousLine = spans.lastOrNull()?.lineIndex ?: previousLine
@@ -104,9 +179,9 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
     }
 
     override fun visit(code: Code) {
-        writer.tag("tt")
+        writer.tag(CODE_TAG)
         writer.text(code.literal.replace(' ', '\u00a0'))
-        writer.tag("/tt")
+        writer.tag("/$CODE_TAG")
     }
 
     override fun visit(block: FencedCodeBlock) = codeBlock(block.literal)
@@ -115,12 +190,12 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
 
     private fun codeBlock(text: String) {
         writer.tag("div")
-        writer.tag("tt")
+        writer.tag(CODE_TAG)
         text.removeSuffix("\n").split('\n').forEachIndexed { index, line ->
             if (index > 0) writer.raw("<br />")
             writer.text(line.replace("\t", "    ").replace(' ', '\u00a0'))
         }
-        writer.tag("/tt")
+        writer.tag("/$CODE_TAG")
         writer.tag("/div")
     }
 
@@ -145,7 +220,17 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
 
     override fun visit(item: ListItem) {
         val number = itemNumber
-        val marker = if (number != null) "$number." else if (listDepth == 0) "•" else "–"
+        // GFM task entries such as "- [x] Done" show a checkbox instead of the bullet
+        val taskText = (item.firstChild as? Paragraph)?.firstChild as? Text
+        val task = taskText?.literal?.let(TASK_MARKER::find)
+        val marker =
+            when {
+                task != null -> if (task.groupValues[1] == " ") "☐" else "☑"
+                number != null -> "$number."
+                listDepth == 0 -> "•"
+                else -> "–"
+            }
+        if (task != null) taskText.literal = taskText.literal.substring(task.range.last + 1)
         if (number != null) itemNumber = number + 1
 
         val indentTag = "$LIST_INDENT_TAG$listDepth"
@@ -161,4 +246,14 @@ private class MarkdownHtmlRenderer(context: HtmlNodeRendererContext) :
         val remaining = if (first is Paragraph) first.next else first
         renderBlocks(remaining, (first as? Paragraph)?.sourceSpans?.lastOrNull()?.lineIndex)
     }
+}
+
+/** Marks a quote with a thin muted stripe and italic text; both spans also render in widgets. */
+private fun Editable.setQuoteSpans(start: Int, end: Int) {
+    val stripe =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            QuoteSpan(QUOTE_STRIPE_COLOR, 3.dp, 12.dp)
+        } else QuoteSpan(QUOTE_STRIPE_COLOR)
+    setSpan(stripe, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    setSpan(StyleSpan(Typeface.ITALIC), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
 }

@@ -25,6 +25,7 @@ import com.philkes.notallyx.presentation.viewmodel.ExportMimeType
 import com.philkes.notallyx.presentation.viewmodel.preference.BasePreference
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
 import com.philkes.notallyx.presentation.viewmodel.progress.ExportNotesProgress
+import com.philkes.notallyx.presentation.widget.WidgetProvider
 import com.philkes.notallyx.utils.ActionMode
 import com.philkes.notallyx.utils.backup.exportPdfFile
 import com.philkes.notallyx.utils.backup.exportPdfFileFolder
@@ -113,7 +114,10 @@ class NotesFragmentViewModel(app: Application, preferences: NotallyXPreferences)
         val dao = baseNoteDao ?: return
         val ids = actionMode.selectedIds.toLongArray()
         actionMode.close(true)
-        viewModelScope.launch(Dispatchers.IO) { dao.updatePinned(ids, pinned) }
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updatePinned(ids, pinned)
+            WidgetProvider.sendBroadcast(app, ids)
+        }
     }
 
     fun pinBaseNotesToStatusBar(activity: Activity, pinnedToStatusBar: Boolean) {
@@ -134,7 +138,10 @@ class NotesFragmentViewModel(app: Application, preferences: NotallyXPreferences)
         val dao = baseNoteDao ?: return
         val ids = actionMode.selectedIds.toLongArray()
         actionMode.close(true)
-        viewModelScope.launch(Dispatchers.IO) { dao.updateColor(ids, color) }
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateColor(ids, color)
+            WidgetProvider.sendBroadcast(app, ids)
+        }
     }
 
     fun changeColor(oldColor: String, newColor: String) {
@@ -143,7 +150,10 @@ class NotesFragmentViewModel(app: Application, preferences: NotallyXPreferences)
         if (oldColor == defaultColor) {
             preferences.defaultNoteColor.save(newColor)
         }
-        viewModelScope.launch(Dispatchers.IO) { dao.updateColor(oldColor, newColor) }
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateColor(oldColor, newColor)
+            WidgetProvider.sendBroadcastAll(app)
+        }
     }
 
     fun updateBaseNoteLabels(labels: List<String>, id: Long) {

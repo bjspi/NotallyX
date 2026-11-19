@@ -73,7 +73,13 @@ class WidgetRecordActivity : ComponentActivity() {
                 AppWidgetManager.INVALID_APPWIDGET_ID,
             )
         val recording = AudioRecordService.widgetRecording
-        if (recording?.startedAt != startedAt || recording.widgetId != widgetId) {
+        if (
+            recording?.startedAt != startedAt || recording.widgetId != widgetId || recording.saving
+        ) {
+            // Redraw controls left over from a recording that already ended or whose process died.
+            if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                WidgetProvider.refreshRecordingWidget(this, widgetId)
+            }
             finish()
             return
         }
@@ -83,7 +89,7 @@ class WidgetRecordActivity : ComponentActivity() {
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.discard) { _, _ ->
                 try {
-                    startService(AudioRecordService.widgetDiscardIntent(this, startedAt))
+                    startService(AudioRecordService.widgetDiscardIntent(this, widgetId, startedAt))
                 } catch (e: IllegalStateException) {
                     log(TAG, throwable = e)
                     fail()

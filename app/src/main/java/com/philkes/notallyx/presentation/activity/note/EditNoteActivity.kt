@@ -41,6 +41,7 @@ import com.philkes.notallyx.presentation.view.note.TextFormattingAdapter
 import com.philkes.notallyx.presentation.view.note.action.Action
 import com.philkes.notallyx.presentation.view.note.action.AddNoteBottomSheet
 import com.philkes.notallyx.presentation.view.note.renderMarkdown
+import com.philkes.notallyx.presentation.viewmodel.preference.markdownBlankLineScale
 import com.philkes.notallyx.presentation.withAlpha
 import com.philkes.notallyx.utils.LinkMovementMethod
 import com.philkes.notallyx.utils.copyToClipBoard
@@ -64,7 +65,9 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
     private var markdownPreviewJob: Job? = null
     private var markdownPreviewSource: String? = null
     private var renderedMarkdown: CharSequence = ""
+    private var markdownPreviewScale = 1f
     private var editingMarkdown = false
+    private var lastPreviewTouch: Pair<Float, Float>? = null
     private var keyboardVisible = false
 
     private val isMarkdown: Boolean
@@ -103,7 +106,8 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         if (dismissed) stopMarkdownEditing()
     }
 
-    private fun startBodyEditing() {
+    /** @param sourceOffset cursor position in the source, the end of the body if `null` */
+    private fun startBodyEditing(sourceOffset: Int? = null) {
         if (isMarkdown) {
             if (!canEdit) return
             editingMarkdown = true
@@ -112,10 +116,39 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         binding.EnterBody.apply {
             requestFocus()
             if (canEdit) {
-                setSelection(length())
+                setSelection(sourceOffset?.coerceIn(0, length()) ?: length())
                 showKeyboard(this)
             }
         }
+    }
+
+    /**
+     * Maps the tapped position in the rendered preview to the matching position in the Markdown
+     * source: the tapped word's occurrence closest to the proportional position wins.
+     */
+    private fun previewTapToSourceOffset(): Int? {
+        val (x, y) = lastPreviewTouch ?: return null
+        val rendered = binding.MarkdownPreview.text?.toString().orEmpty()
+        val source = notallyModel.body.toString()
+        if (rendered.isEmpty() || source.isEmpty()) return null
+        val offset = binding.MarkdownPreview.getOffsetForPosition(x, y).coerceIn(0, rendered.length)
+        val estimate = (source.length.toLong() * offset / rendered.length).toInt()
+        val wordStart =
+            rendered.lastIndexOfAny(charArrayOf(' ', '\n', '\u00A0'), offset - 1).let { it + 1 }
+        val wordEnd =
+            rendered.indexOfAny(charArrayOf(' ', '\n', '\u00A0'), offset).let {
+                if (it < 0) rendered.length else it
+            }
+        val word = rendered.substring(wordStart, wordEnd)
+        if (word.isBlank()) return estimate
+        val matches =
+            generateSequence(source.indexOf(word)) { previous ->
+                    source.indexOf(word, previous + 1).takeIf { it >= 0 }
+                }
+                .takeWhile { it >= 0 }
+                .take(MAX_TAP_MATCHES)
+        val match = matches.minByOrNull { kotlin.math.abs(it - estimate) } ?: return estimate
+        return match + (offset - wordStart).coerceIn(0, word.length)
     }
 
     private fun stopMarkdownEditing() {
@@ -129,13 +162,17 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         outState.apply {
             putInt(EXTRA_SELECTION_START, binding.EnterBody.selectionStart)
             putInt(EXTRA_SELECTION_END, binding.EnterBody.selectionEnd)
+            putBoolean(EXTRA_EDITING_MARKDOWN, editingMarkdown)
         }
     }
 
     override suspend fun highlightSearchResults(search: String): Int {
         binding.EnterBody.clearHighlights()
         val inPreview = binding.MarkdownPreview.isVisible
-        val text = if (inPreview) renderedMarkdown.toString() else notallyModel.body.toString()
+        // Code in the preview keeps its spaces as NBSPs; match them like regular spaces
+        val text =
+            if (inPreview) renderedMarkdown.toString().replace('\u00A0', ' ')
+            else notallyModel.body.toString()
         searchResultIndices =
             if (search.isEmpty()) emptyList()
             else withContext(Dispatchers.Default) { text.findAllOccurrences(search) }
@@ -227,7 +264,12 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         savedInstanceState?.let {
             val selectionStart = it.getInt(EXTRA_SELECTION_START, -1)
             val selectionEnd = it.getInt(EXTRA_SELECTION_END, -1)
-            if (selectionStart > -1 && !isMarkdown) {
+            if (isMarkdown && it.getBoolean(EXTRA_EDITING_MARKDOWN, false)) {
+                // Restore source editing after a configuration change instead of the preview
+                binding.EnterBody.postOnAnimation {
+                    startBodyEditing(selectionStart.takeIf { start -> start > -1 })
+                }
+            } else if (selectionStart > -1 && !isMarkdown) {
                 binding.EnterBody.postOnAnimation {
                     binding.EnterBody.focusAndSelect(selectionStart, selectionEnd)
                 }
@@ -267,20 +309,22 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
                 val next = formats[selection]
                 if (next == previous) return@setSingleChoiceItems
                 lifecycleScope.launch {
-                    notallyModel.format = next
+                    val previousBody = notallyModel.convertFormat(next)
                     try {
                         saveNote()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         notallyModel.format = previous
+                        notallyModel.body = previousBody
                         log("EditNoteActivity", throwable = e)
                         showToast(R.string.note_save_failed)
                     }
                     initBottomMenu()
                     editingMarkdown = false
-                    setupEditor()
-                    updateMarkdownPreview()
+                    updateEditText()
+                    // Undo would restore the other format's text under the new format
+                    changeHistory.reset()
                 }
             }
             .setCancelButton()
@@ -301,17 +345,34 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
         binding.MarkdownPreview.isVisible = showPreview
         if (showPreview) {
             val source = notallyModel.body.toString()
-            if (source == markdownPreviewSource && !visibilityChanged) return
-            markdownPreviewJob?.cancel()
-            markdownPreviewSource = source
-            renderedMarkdown = ""
-            searchResultIndices = emptyList()
-            binding.MarkdownPreview.text = null
-            markdownPreviewJob = lifecycleScope.launch {
-                renderedMarkdown = withContext(Dispatchers.IO) { renderMarkdown(source) }
+            val blankLineScale = preferences.markdownBlankLineScale
+            if (source == markdownPreviewSource && blankLineScale == markdownPreviewScale) {
+                if (!visibilityChanged) return
+                // Unchanged source: show the cached rendering at once so the scroll position stays
+                markdownPreviewJob?.cancel()
                 binding.MarkdownPreview.text = renderedMarkdown
                 if (isInSearchMode()) updateSearchResults(search.query)
                 binding.MarkdownPreview.doOnLayout { updateJumpButtonsVisibility() }
+                return
+            }
+            markdownPreviewJob?.cancel()
+            markdownPreviewSource = null
+            val scrollY = binding.ScrollView.scrollY
+            // Keep the previous rendering until the new one is ready, so the content does not
+            // collapse and reset the scroll position
+            markdownPreviewJob = lifecycleScope.launch {
+                val rendered =
+                    withContext(Dispatchers.IO) { renderMarkdown(source, blankLineScale) }
+                markdownPreviewSource = source
+                markdownPreviewScale = blankLineScale
+                renderedMarkdown = rendered
+                searchResultIndices = emptyList()
+                binding.MarkdownPreview.text = rendered
+                if (isInSearchMode()) updateSearchResults(search.query)
+                binding.MarkdownPreview.doOnLayout {
+                    binding.ScrollView.scrollTo(0, scrollY)
+                    updateJumpButtonsVisibility()
+                }
             }
         } else if (visibilityChanged) {
             markdownPreviewJob?.cancel()
@@ -325,7 +386,16 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
             setTextIsSelectable(!canEdit)
             movementMethod =
                 if (canEdit) null else android.text.method.LinkMovementMethod.getInstance()
-            setOnClickListener(if (canEdit) View.OnClickListener { startBodyEditing() } else null)
+            setOnTouchListener { _, event ->
+                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    lastPreviewTouch = event.x to event.y
+                }
+                false
+            }
+            setOnClickListener(
+                if (canEdit) View.OnClickListener { startBodyEditing(previewTapToSourceOffset()) }
+                else null
+            )
         }
         setupMovementMethod()
         binding.EnterBody.customSelectionActionModeCallback =
@@ -513,6 +583,8 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
 
     companion object {
         private const val EXTRA_SELECTION_START = "notallyx.intent.extra.EXTRA_SELECTION_START"
+        private const val EXTRA_EDITING_MARKDOWN = "notallyx.intent.extra.EXTRA_EDITING_MARKDOWN"
+        private const val MAX_TAP_MATCHES = 200
         private const val EXTRA_SELECTION_END = "notallyx.intent.extra.EXTRA_SELECTION_END"
     }
 }

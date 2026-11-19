@@ -16,6 +16,7 @@ import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.presentation.view.note.renderedBody
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
 import com.philkes.notallyx.presentation.viewmodel.preference.displayBodySize
+import com.philkes.notallyx.presentation.viewmodel.preference.markdownBlankLineScale
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.extractWidgetColors
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetCheckedChangeIntent
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetOpenNoteIntent
@@ -70,7 +71,7 @@ class WidgetFactory(
 
             setTextViewTextSize(R.id.Note, TypedValue.COMPLEX_UNIT_SP, bodyTextSize)
             if (note.body.isNotEmpty()) {
-                setTextViewText(R.id.Note, note.renderedBody())
+                setTextViewText(R.id.Note, note.renderedBody(preferences.markdownBlankLineScale))
                 setViewVisibility(R.id.Note, View.VISIBLE)
             } else setViewVisibility(R.id.Note, View.GONE)
 

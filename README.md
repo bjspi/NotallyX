@@ -9,7 +9,7 @@
 ### Markdown notes and previews
 
 - Choose **Note format** in each text note’s menu to switch between Markdown and rich text. **Settings → Appearance → Markdown for new notes** sets the format for newly created text notes. Backups preserve each note’s format.
-- The list and grid overviews, the opened note, and the home-screen widget render Markdown. Previews support headings, subheadings, nested and numbered lists, inline formatting, and code. [Grid preview](app/src/screenshots/ScreenshotTests/markdownNote/grid.png)
+- The list and grid overviews, the opened note, and the home-screen widget render Markdown. Previews support headings, subheadings, nested and numbered lists, inline formatting, quotes, task checkboxes, and code with a subtle background. [Grid preview](app/src/screenshots/ScreenshotTests/markdownNote/grid.png)
 - Tap directly in the text of an editable Markdown note to edit its source. Press Enter once for a line break and twice for a blank line. Closing the keyboard restores the rendered preview.
 - Imported Markdown text notes retain their source. Markdown files containing only task entries can be imported as checklists. Exporting a Markdown note as `.md` preserves its source.
 
@@ -24,10 +24,37 @@
 ### ADB access
 
 - Enable **ADB access** under **Settings → Security** to use an authorized ADB shell. Unlock NotallyX first if app lock is enabled.
-- Read notes and checklists by ID, including entries in the archive and bin. Download images, files, and audio attachments. Edit the title, body, format, or rich-text spans of existing notes and update checklist items. Markdown notes expose their original source, which can also be downloaded as `.md`. [ADB commands](documentation/docs/features/adb-access.md)
+- Read notes and checklists by ID, including entries in the archive and bin. Download images, files, and audio attachments. Edit the title, body, format, or rich-text spans of existing notes and update checklist items. Create new Markdown notes or checklists. Markdown notes expose their original source, which can also be downloaded as `.md`. [ADB commands](documentation/docs/features/adb-access.md)
+
+#### ADB reference for scripts and agents
+
+Prerequisites: an ADB-authorized device, **Settings → Security → ADB access** on, and NotallyX unlocked when app lock is enabled. Every call must come from `adb shell` (UID 2000); other callers get a `SecurityException`. The authority depends on the build: `com.philkes.notallyx.adb` (release), `com.philkes.notallyx.debug.adb` (debug), `com.philkes.notallyx.beta.adb` (beta). In the examples, replace `$A` with `content://<authority>`, for example `content://com.philkes.notallyx.debug.adb`.
+
+| Goal | Command | Result |
+| --- | --- | --- |
+| List all notes | `adb shell content query --uri $A/notes` | Rows with `id`, `type` (`NOTE`/`LIST`), `folder` (`NOTES`/`ARCHIVED`/`DELETED`), `title`, `format` (`text`/`markdown`) |
+| Read one note | `adb shell content query --uri $A/notes/42` | `id, type, folder, title, body, timestamp, modifiedTimestamp, color, pinned, isPinnedToStatus, viewMode, labels, spans, items, reminders, images, files, audios, format`. Arrays are JSON, dates are Unix milliseconds |
+| Read selected columns | `adb shell content query --uri $A/notes/42 --projection title:format:body` | Only these columns |
+| Edit a simple field | `adb shell 'content update --uri $A/notes/42 --bind "title:s:New title"'` | `title` on any note; `body`, `format`, `spans` on text notes; `items` on checklists |
+| Edit with any content | `adb shell content update --uri $A/notes/42 --bind "patch:s:<Base64 of UTF-8 JSON>"` | JSON object with any of `title`, `body`, `format`, `spans`, `items` |
+| Create a note | `adb shell content insert --uri $A/notes --bind "patch:s:<Base64 of UTF-8 JSON>"` | New note in the notes folder: Markdown text note by default, `"format":"text"` for rich text, `items` for a checklist. The new ID is the highest ID in the index |
+| Download a note as Markdown | `adb exec-out content read --uri $A/notes/42/markdown > note.md` | Markdown source, or Markdown generated from rich text and checklists |
+| Download an attachment | `adb exec-out content read --uri $A/notes/42/attachments/<images\|files\|audios>/<name> > file` | `localName` from `images`/`files`, `name` from `audios` |
+| Download a full backup | `adb exec-out content read --uri $A/backup.zip > NotallyX_Backup.zip` | Regular NotallyX backup plus `markdown/*.md`, encrypted with the backup password if one is set |
+
+Rules for writing:
+
+- Use `patch` for multiline text, colons, quotes, non-ASCII text, `spans` and `items`. Shell `--bind` values break on these. Build the JSON, encode it as UTF-8, then Base64. PowerShell: `[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))`. POSIX: `printf '%s' "$json" | base64 -w0`.
+- Example create patch: `{"title":"Shopping","body":"# Today\n\n- [ ] Milk\n- [x] Bread"}`. Example checklist: `{"title":"Todo","items":[{"body":"First","checked":false},{"body":"Sub task","isChild":true}]}`.
+- `items` replaces the whole checklist. Their array order is the display order; a child item follows its parent, and the first item cannot be a child.
+- `spans` uses zero-based UTF-16 offsets with exclusive `end`, as returned by the query. Updating `body` without `spans` clears rich-text formatting. Switching only `format` keeps body and spans.
+- Edits refresh the home-screen widget and trigger the configured backup-on-save. Deleting notes over ADB is not supported.
+
+Full guide: [ADB access](documentation/docs/features/adb-access.md).
 
 ### Appearance
 
+- **Settings → Appearance → Blank line height in Markdown** sets how tall blank lines appear in rendered Markdown, from hidden to a full text line.
 - Turn on **Settings → Appearance → Lined notes** to add faint horizontal lines to the text in opened notes. The lines follow wrapped and blank lines in both the Markdown preview and the editor.
 - Select `dd.MM.yyyy` for dates such as `18.11.2026`. The overview and the opened-note view each have their own setting under **Settings → Appearance**.
 - Drag in the color wheel or along the hue and brightness sliders. The color swatch and hex value update as you drag.

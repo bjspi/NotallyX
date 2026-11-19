@@ -22,6 +22,7 @@ import com.philkes.notallyx.presentation.view.main.BaseNoteVHPreferences
 import com.philkes.notallyx.presentation.view.main.createCallback
 import com.philkes.notallyx.presentation.view.misc.ItemListener
 import com.philkes.notallyx.presentation.viewmodel.preference.NotesView
+import com.philkes.notallyx.presentation.viewmodel.preference.markdownBlankLineScale
 import com.philkes.notallyx.utils.getCurrentImagesDirectory
 import java.util.Collections
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,7 @@ open class PickNoteActivity : LockedActivity<ActivityPickNoteBinding>(), ItemLis
                         labelTagsHiddenInOverview.value,
                         imagesHiddenInOverview.value,
                         notesSorting.value.sortedBy,
+                        markdownBlankLineScale,
                     ),
                     application.getCurrentImagesDirectory(),
                     this@PickNoteActivity,

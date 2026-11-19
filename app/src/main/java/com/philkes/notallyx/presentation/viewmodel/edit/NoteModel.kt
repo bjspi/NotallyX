@@ -18,6 +18,7 @@ import androidx.room.withTransaction
 import com.philkes.notallyx.R
 import com.philkes.notallyx.data.NotallyDatabase
 import com.philkes.notallyx.data.dao.BaseNoteDao
+import com.philkes.notallyx.data.imports.markdown.createMarkdownFromBodyAndSpans
 import com.philkes.notallyx.data.imports.txt.extractListItems
 import com.philkes.notallyx.data.imports.txt.findListSyntaxRegex
 import com.philkes.notallyx.data.model.Audio
@@ -441,6 +442,23 @@ open class NoteModel(
         if (id == noteId) {
             audios.value = updated
         }
+    }
+
+    /**
+     * Switches the text note's format. Rich-text formatting becomes Markdown syntax so it is not
+     * silently hidden; text without formatting, and Markdown switched back to rich text, keep their
+     * characters verbatim, since a note typed in Markdown must not get its syntax escaped.
+     *
+     * @return the body before the switch, to restore it if saving fails
+     */
+    fun convertFormat(next: NoteFormat): Editable {
+        val previousBody = body
+        val spans = getFilteredSpans(body)
+        if (next == NoteFormat.MARKDOWN && spans.isNotEmpty()) {
+            body = SpannableStringBuilder(createMarkdownFromBodyAndSpans(body.toString(), spans))
+        }
+        format = next
+        return previousBody
     }
 
     fun getBaseNote(): BaseNote {
