@@ -33,7 +33,7 @@ import com.philkes.notallyx.presentation.viewmodel.preference.Theme
 import com.philkes.notallyx.presentation.viewmodel.preference.displayTitleSize
 import com.philkes.notallyx.utils.audio.AudioRecordService
 import com.philkes.notallyx.utils.embedIntentExtras
-import com.philkes.notallyx.utils.getOpenNotePendingIntent
+import com.philkes.notallyx.utils.getOpenNoteIntent
 import com.philkes.notallyx.utils.isSystemInDarkMode
 import com.philkes.notallyx.utils.log
 import java.util.concurrent.ConcurrentHashMap
@@ -330,13 +330,29 @@ class WidgetProvider : AppWidgetProvider() {
                         setInt(R.id.Layout, "setBackgroundColor", backgroundColor)
                         setTextColor(R.id.WidgetTitle, controlsColor)
                         setInt(R.id.ChangeNote, "setColorFilter", controlsColor)
+                        setInt(R.id.WidgetNewNote, "setColorFilter", controlsColor)
+                        setOnClickPendingIntent(
+                            R.id.WidgetNewNote,
+                            context.getWidgetNewNotePendingIntent(),
+                        )
                         setInt(R.id.WidgetVoice, "setColorFilter", controlsColor)
                         setInt(R.id.WidgetDiscardRecording, "setColorFilter", controlsColor)
                         setTextColor(R.id.WidgetRecordingTimer, controlsColor)
                         if (header != null) {
-                            val openNote = context.getOpenNotePendingIntent(noteId, header.type)
-                            setOnClickPendingIntent(R.id.Layout, openNote)
-                            setOnClickPendingIntent(R.id.WidgetTitle, openNote)
+                            // The body opens the note alone so that Back returns to the home
+                            // screen, the title opens it on top of the notes overview
+                            setOnClickPendingIntent(
+                                R.id.Layout,
+                                context.getWidgetOpenNotePendingIntent(noteId, header.type),
+                            )
+                            setOnClickPendingIntent(
+                                R.id.WidgetTitle,
+                                context.getWidgetOpenNotePendingIntent(
+                                    noteId,
+                                    header.type,
+                                    withOverview = true,
+                                ),
+                            )
                             setTextViewText(R.id.WidgetTitle, header.title)
                             setTextViewTextSize(
                                 R.id.WidgetTitle,
@@ -369,7 +385,7 @@ class WidgetProvider : AppWidgetProvider() {
                     RemoteViews(context.packageName, R.layout.widget_locked).apply {
                         header?.let {
                             val lockedPendingIntent =
-                                context.getOpenNotePendingIntent(noteId, it.type)
+                                context.getWidgetOpenNotePendingIntent(noteId, it.type)
                             setOnClickPendingIntent(R.id.Layout, lockedPendingIntent)
                             setOnClickPendingIntent(R.id.Text, lockedPendingIntent)
                         }
@@ -589,6 +605,55 @@ class WidgetProvider : AppWidgetProvider() {
             return Pair(backgroundColor, getContrastFontColor(backgroundColor))
         }
 
+        private fun Context.notesOverviewIntent() =
+            Intent(this, MainActivity::class.java)
+                .setAction(MainActivity.ACTION_OPEN_NOTES_OVERVIEW)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+
+        /**
+         * Opens the note from the widget in a fresh task. With [withOverview] the notes overview
+         * lies below it, so Back leads to all notes instead of the home screen.
+         */
+        internal fun Context.getWidgetOpenNotePendingIntent(
+            noteId: Long,
+            noteType: Type,
+            withOverview: Boolean = false,
+        ): PendingIntent {
+            // The own actions keep these apart from the open-note intents of notifications
+            val note = getOpenNoteIntent(noteId, noteType)
+            return if (withOverview) {
+                note.action = ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW
+                note.flags = 0
+                PendingIntent.getActivities(
+                    this,
+                    noteId.hashCode(),
+                    arrayOf(notesOverviewIntent(), note),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            } else {
+                note.action = ACTION_WIDGET_OPEN_NOTE
+                note.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                PendingIntent.getActivity(
+                    this,
+                    noteId.hashCode(),
+                    note,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
+        }
+
+        /** Creates a new text note from the widget, with the notes overview below it. */
+        internal fun Context.getWidgetNewNotePendingIntent(): PendingIntent =
+            PendingIntent.getActivities(
+                this,
+                0,
+                arrayOf(
+                    notesOverviewIntent(),
+                    Intent(this, EditNoteActivity::class.java).setAction(ACTION_WIDGET_NEW_NOTE),
+                ),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
         private fun openActivity(context: Context, originalIntent: Intent, clazz: Class<*>) {
             val id = originalIntent.getLongExtra(EXTRA_SELECTED_BASE_NOTE, 0)
             val widgetId = originalIntent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 0)
@@ -634,6 +699,10 @@ class WidgetProvider : AppWidgetProvider() {
         const val ACTION_OPEN_NOTE = "com.philkes.notallyx.ACTION_OPEN_NOTE"
         const val ACTION_OPEN_LIST = "com.philkes.notallyx.ACTION_OPEN_LIST"
         const val ACTION_SELECT_NOTE = "com.philkes.notallyx.ACTION_SELECT_NOTE"
+        private const val ACTION_WIDGET_OPEN_NOTE = "com.philkes.notallyx.ACTION_WIDGET_OPEN_NOTE"
+        private const val ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW =
+            "com.philkes.notallyx.ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW"
+        private const val ACTION_WIDGET_NEW_NOTE = "com.philkes.notallyx.ACTION_WIDGET_NEW_NOTE"
 
         const val ACTION_CHECKED_CHANGED = "com.philkes.notallyx.ACTION_CHECKED_CHANGED"
         internal const val ACTION_TOGGLE_NOTE_CHOICES =

@@ -88,6 +88,8 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
         )
 
     val notesView = createEnumPreference(preferences, "view", NotesView.LIST, R.string.view)
+    val compactNotes =
+        BooleanPreference("compactNotesOverview", preferences, false, R.string.notes_layout_compact)
     val notesSorting = NotesSortPreference(preferences)
     val startView =
         StringPreference("startView", preferences, START_VIEW_DEFAULT, R.string.start_view)
@@ -379,6 +381,7 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
                 dateFormatNoteView,
                 timeFormatNoteView,
                 notesView,
+                compactNotes,
                 notesSorting,
                 listItemSorting,
                 maxItems,

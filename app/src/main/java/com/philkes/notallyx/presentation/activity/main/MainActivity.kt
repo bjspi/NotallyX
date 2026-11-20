@@ -54,6 +54,7 @@ import com.philkes.notallyx.presentation.viewmodel.main.fragment.NotesFragmentVi
 import com.philkes.notallyx.presentation.viewmodel.main.fragment.NotesFragmentViewModel.Companion.CURRENT_LABEL_NONE
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences.Companion.START_VIEW_DEFAULT
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences.Companion.START_VIEW_UNLABELED
+import com.philkes.notallyx.presentation.viewmodel.preference.NotesView
 import com.philkes.notallyx.presentation.viewmodel.progress.MigrationProgress
 import com.philkes.notallyx.utils.LATEST_DATA_SCHEMA
 import com.philkes.notallyx.utils.backup.exportNotes
@@ -630,12 +631,44 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
                 .setIcon(iconRes)
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         }
+        if (!ACTIVITES_WITHOUT_SEARCH.contains(currentDestinationId)) addNotesLayoutMenu(menu)
 
         return true
     }
 
+    /** Lets the tiles of the notes overview switch between list, grid and compact directly. */
+    private fun addNotesLayoutMenu(menu: Menu) {
+        val layoutMenu =
+            menu.addSubMenu(Menu.NONE, Menu.NONE, Menu.NONE, R.string.notes_layout).apply {
+                item.setIcon(R.drawable.notes_layout)
+                item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            }
+        val grid = preferences.notesView.value == NotesView.GRID
+        layoutMenu.add(LAYOUT_GROUP, ACTION_LAYOUT_LIST, Menu.NONE, R.string.list).setChecked(!grid)
+        layoutMenu
+            .add(LAYOUT_GROUP, ACTION_LAYOUT_GRID, Menu.NONE, R.string.notes_layout_grid)
+            .setChecked(grid)
+        layoutMenu.setGroupCheckable(LAYOUT_GROUP, true, true)
+        layoutMenu
+            .add(Menu.NONE, ACTION_LAYOUT_COMPACT, Menu.NONE, R.string.notes_layout_compact)
+            .setCheckable(true)
+            .setChecked(preferences.compactNotes.value)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            ACTION_LAYOUT_LIST,
+            ACTION_LAYOUT_GRID -> {
+                val view = if (item.itemId == ACTION_LAYOUT_GRID) NotesView.GRID else NotesView.LIST
+                preferences.notesView.save(view)
+                invalidateOptionsMenu()
+                true
+            }
+            ACTION_LAYOUT_COMPACT -> {
+                preferences.compactNotes.save(!preferences.compactNotes.value)
+                invalidateOptionsMenu()
+                true
+            }
             ACTION_SEARCH -> {
                 val isInSearchFragment = navController.currentDestination?.id == R.id.Search
 
@@ -680,6 +713,10 @@ class MainActivity : LockedActivity<ActivityMainBinding>() {
         const val EXTRA_FRAGMENT_TO_OPEN = "notallyx.intent.extra.FRAGMENT_TO_OPEN"
         const val EXTRA_SKIP_START_VIEW_ON_BACK = "notallyx.intent.extra.SKIP_START_VIEW_ON_BACK"
         private const val ACTION_SEARCH = 1001
+        private const val ACTION_LAYOUT_LIST = 1002
+        private const val ACTION_LAYOUT_GRID = 1003
+        private const val ACTION_LAYOUT_COMPACT = 1004
+        private const val LAYOUT_GROUP = 1
         val ACTIVITES_WITHOUT_SEARCH = setOf(R.id.Settings, R.id.Reminders, R.id.Labels)
     }
 }

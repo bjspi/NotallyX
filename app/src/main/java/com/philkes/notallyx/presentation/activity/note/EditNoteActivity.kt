@@ -68,6 +68,7 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
     private var markdownPreviewScale = 1f
     private var editingMarkdown = false
     private var lastPreviewTouch: Pair<Float, Float>? = null
+    private var lastContentTouchY = -1f
     private var keyboardVisible = false
 
     private val isMarkdown: Boolean
@@ -426,10 +427,24 @@ class EditNoteActivity : EditActivity(Type.NOTE) {
             binding.EnterBody.setOnSelectionChange { _, _ -> }
         }
         binding.ContentLayout.apply {
-            setOnClickListener(
-                if (isMarkdown) null else View.OnClickListener { startBodyEditing() }
-            )
-            isClickable = !isMarkdown
+            setOnTouchListener { _, event ->
+                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                    lastContentTouchY = event.y
+                }
+                false
+            }
+            // Markdown stays in its preview when the title area is tapped, but the empty space
+            // below the text starts editing just like in plain text notes
+            setOnClickListener {
+                if (!isMarkdown) startBodyEditing()
+                else if (
+                    canEdit &&
+                        lastContentTouchY >=
+                            maxOf(binding.MarkdownPreview.bottom, binding.EnterBody.bottom)
+                ) {
+                    startBodyEditing()
+                }
+            }
         }
     }
 

@@ -59,6 +59,7 @@ data class BaseNoteVHPreferences(
     val hideImages: Boolean,
     val sortedBy: NotesSortBy,
     val markdownBlankLineScale: Float = 1f,
+    val compact: Boolean = false,
 )
 
 class BaseNoteVH(
@@ -88,6 +89,13 @@ class BaseNoteVH(
 
             Title.maxLines = preferences.maxTitleLines
             Note.maxLines = preferences.maxLines
+            if (preferences.compact) {
+                CardContent.updatePadding(bottom = 8.dp)
+                Space.updateLayoutParams { height = 8.dp }
+                root.updateLayoutParams<android.view.ViewGroup.MarginLayoutParams> {
+                    bottomMargin = 4.dp
+                }
+            }
 
             root.setOnClickListener { listener.onClick(absoluteAdapterPosition) }
 

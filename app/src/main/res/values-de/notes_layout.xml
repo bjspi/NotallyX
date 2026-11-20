@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notes_layout">Kachel-Ansicht</string>
+    <string name="notes_layout_grid">Raster (2 Spalten)</string>
+    <string name="notes_layout_compact">Kompakte Kacheln</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notes_layout">Note layout</string>
+    <string name="notes_layout_grid">Grid (2 columns)</string>
+    <string name="notes_layout_compact">Compact tiles</string>
+</resources>

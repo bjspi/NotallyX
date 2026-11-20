@@ -37,6 +37,14 @@
             android:visibility="gone" />
 
         <ImageButton
+            android:id="@+id/WidgetNewNote"
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/take_note"
+            android:src="@drawable/add" />
+
+        <ImageButton
             android:id="@+id/ChangeNote"
             android:layout_width="40dp"
             android:layout_height="48dp"

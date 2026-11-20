@@ -48,6 +48,7 @@ import com.philkes.notallyx.presentation.viewmodel.main.fragment.NotesFragmentVi
 import com.philkes.notallyx.presentation.viewmodel.preference.NotesView
 import com.philkes.notallyx.presentation.viewmodel.preference.markdownBlankLineScale
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
 
@@ -269,16 +270,21 @@ abstract class NotesFragment : Fragment(), ItemListener {
                     dateFormatOverview.value,
                     timeFormatOverview.value,
                     notesAdapterSortCallback(),
-                    BaseNoteVHPreferences(
-                        textSizeOverview.value,
-                        maxItems.value,
-                        maxLines.value,
-                        maxTitle.value,
-                        labelTagsHiddenInOverview.value,
-                        imagesHiddenInOverview.value,
-                        notesSorting.value.sortedBy,
-                        markdownBlankLineScale,
-                    ),
+                    compactNotes.value.let { compact ->
+                        BaseNoteVHPreferences(
+                            textSizeOverview.value,
+                            if (compact) maxItems.value.coerceAtMost(COMPACT_MAX_ITEMS)
+                            else maxItems.value,
+                            if (compact) maxLines.value.coerceAtMost(COMPACT_MAX_LINES)
+                            else maxLines.value,
+                            if (compact) 1 else maxTitle.value,
+                            labelTagsHiddenInOverview.value,
+                            compact || imagesHiddenInOverview.value,
+                            notesSorting.value.sortedBy,
+                            markdownBlankLineScale,
+                            compact,
+                        )
+                    },
                     model.imageRoot,
                     this@NotesFragment,
                     viewLifecycleOwner.lifecycleScope,
@@ -314,6 +320,8 @@ abstract class NotesFragment : Fragment(), ItemListener {
     private fun setupObserver() {
         var lastSubmittedList: List<Item>? = null
         var currentAppliedSort = model.preferences.notesSorting.value
+        var appliedLayout =
+            model.preferences.notesView.value to model.preferences.compactNotes.value
 
         viewLifecycleOwner.repeatOnLifecycleScope {
             launch {
@@ -324,6 +332,21 @@ abstract class NotesFragment : Fragment(), ItemListener {
                     }
                     binding?.ImageView?.isVisible = list.isEmpty()
                 }
+            }
+            launch {
+                // Switching the tile layout from the toolbar applies without leaving the screen
+                combine(model.preferences.notesView.flow, model.preferences.compactNotes.flow) {
+                        view,
+                        compact ->
+                        view to compact
+                    }
+                    .collect { layout ->
+                        if (layout == appliedLayout) return@collect
+                        appliedLayout = layout
+                        setupAdapter()
+                        setupRecyclerView()
+                        lastSubmittedList?.let { notesAdapter?.submitList(it) }
+                    }
             }
             launch {
                 model.preferences.notesSorting.flow.collect { notesSort ->
@@ -375,6 +398,8 @@ abstract class NotesFragment : Fragment(), ItemListener {
     }
 
     companion object {
+        private const val COMPACT_MAX_ITEMS = 2
+        private const val COMPACT_MAX_LINES = 2
         private const val EXTRA_SCROLL_POS = "notallyx.intent.extra.SCROLL_POS"
         private const val EXTRA_SCROLL_OFFSET = "notallyx.intent.extra.SCROLL_OFFSET"
     }
