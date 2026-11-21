@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_note_shortcut">Notiz-Verknüpfung</string>
+    <string name="widget_note_shortcut_description">Öffnet eine Notiz oder Liste in der App</string>
+    <string name="widget_new_note">Neue Notiz</string>
+    <string name="widget_new_note_description">Erstellt eine neue Textnotiz</string>
+</resources>

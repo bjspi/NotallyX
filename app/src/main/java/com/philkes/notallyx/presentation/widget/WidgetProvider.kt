@@ -245,6 +245,8 @@ class WidgetProvider : AppWidgetProvider() {
             val preferences = NotallyXPreferences.getInstance(app)
 
             val manager = AppWidgetManager.getInstance(context)
+            NoteShortcutWidgetProvider.updateWidgets(app, noteIds, locked)
+            NewNoteWidgetProvider.updateWidgets(app)
             val updatableWidgets =
                 preferences.getUpdatableWidgets().filter { (id, noteId) ->
                     noteIds == null || noteId in noteIds || openNotePickers.containsKey(id)
@@ -596,21 +598,36 @@ class WidgetProvider : AppWidgetProvider() {
                 .setAction(MainActivity.ACTION_OPEN_NOTES_OVERVIEW)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
 
-        /** Opens the note from the widget alone in a fresh task, so Back returns home. */
+        /**
+         * Opens the note from the widget in a fresh task. With [withOverview] the notes overview
+         * lies below it, so Back leads to all notes instead of the home screen.
+         */
         internal fun Context.getWidgetOpenNotePendingIntent(
             noteId: Long,
             noteType: Type,
+            withOverview: Boolean = false,
         ): PendingIntent {
-            // The own action keeps these apart from the open-note intents of notifications
+            // The own actions keep these apart from the open-note intents of notifications
             val note = getOpenNoteIntent(noteId, noteType)
-            note.action = ACTION_WIDGET_OPEN_NOTE
-            note.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            return PendingIntent.getActivity(
-                this,
-                noteId.hashCode(),
-                note,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
+            return if (withOverview) {
+                note.action = ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW
+                note.flags = 0
+                PendingIntent.getActivities(
+                    this,
+                    noteId.hashCode(),
+                    arrayOf(notesOverviewIntent(), note),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            } else {
+                note.action = ACTION_WIDGET_OPEN_NOTE
+                note.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                PendingIntent.getActivity(
+                    this,
+                    noteId.hashCode(),
+                    note,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
         }
 
         /** Brings the app to the front on its notes overview. */
@@ -684,6 +701,8 @@ class WidgetProvider : AppWidgetProvider() {
         const val ACTION_OPEN_LIST = "com.philkes.notallyx.ACTION_OPEN_LIST"
         const val ACTION_SELECT_NOTE = "com.philkes.notallyx.ACTION_SELECT_NOTE"
         private const val ACTION_WIDGET_OPEN_NOTE = "com.philkes.notallyx.ACTION_WIDGET_OPEN_NOTE"
+        private const val ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW =
+            "com.philkes.notallyx.ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW"
         private const val ACTION_WIDGET_NEW_NOTE = "com.philkes.notallyx.ACTION_WIDGET_NEW_NOTE"
 
         const val ACTION_CHECKED_CHANGED = "com.philkes.notallyx.ACTION_CHECKED_CHANGED"

@@ -157,6 +157,16 @@
         </activity>
 
         <activity
+            android:name=".presentation.activity.ConfigureNoteShortcutWidgetActivity"
+            android:exported="false">
+
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+
+        </activity>
+
+        <activity
             android:name=".presentation.activity.note.PickNoteActivity"
             android:exported="false">
         </activity>
@@ -184,6 +194,36 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget" />
+
+        </receiver>
+
+        <receiver
+            android:name=".presentation.widget.NoteShortcutWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_note_shortcut">
+
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_note_shortcut" />
+
+        </receiver>
+
+        <receiver
+            android:name=".presentation.widget.NewNoteWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_new_note">
+
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_new_note" />
 
         </receiver>
 

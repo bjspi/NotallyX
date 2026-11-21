@@ -295,6 +295,17 @@ class NotallyXPreferences private constructor(private val context: ContextWrappe
         }
     }
 
+    /** Note shown by a 1x1 note shortcut widget, 0 if none is chosen yet. */
+    fun getNoteShortcutWidget(id: Int) = preferences.getLong("noteShortcutWidget:$id", 0)
+
+    fun setNoteShortcutWidget(id: Int, noteId: Long) {
+        preferences.edit(true) { putLong("noteShortcutWidget:$id", noteId) }
+    }
+
+    fun deleteNoteShortcutWidget(id: Int) {
+        preferences.edit(true) { remove("noteShortcutWidget:$id") }
+    }
+
     fun getUpdatableWidgets(noteIds: LongArray? = null): List<Pair<Int, Long>> {
         val updatableWidgets = ArrayList<Pair<Int, Long>>()
         val pairs = preferences.all
