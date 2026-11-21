@@ -85,7 +85,14 @@ class WidgetNotePickerTest {
             val dropdown = widget.findViewById<View>(R.id.WidgetNoteDropdown)
             assertEquals(View.VISIBLE, dropdown.visibility)
             assertEquals(View.GONE, widget.findViewById<View>(R.id.WidgetNotePicker).visibility)
-            assertTrue(dropdown.performClick())
+            assertTrue(widget.findViewById<View>(R.id.WidgetOpenApp).performClick())
+            ShadowLooper.idleMainLooper()
+            val opened = checkNotNull(shadowOf(app).nextStartedActivity)
+            assertEquals(MainActivity::class.java.name, opened.component?.className)
+            assertEquals(MainActivity.ACTION_OPEN_NOTES_OVERVIEW, opened.action)
+            // Title and arrow share one click target that toggles the note picker
+            assertEquals(widget.findViewById<View>(R.id.WidgetTitleArea), dropdown.parent)
+            assertTrue(widget.findViewById<View>(R.id.WidgetTitleArea).performClick())
             awaitWidget {
                 host.getViewFor(widgetId).findViewById<View>(R.id.WidgetNotePicker).visibility ==
                     View.VISIBLE
@@ -121,12 +128,6 @@ class WidgetNotePickerTest {
             assertNotEquals(rowColors, stripeColors)
             val template = choices.tag as PendingIntent
             capture(root, choices, factory)
-
-            assertTrue(root.findViewById<View>(R.id.WidgetOpenNotes).performClick())
-            ShadowLooper.idleMainLooper()
-            val overview = checkNotNull(shadowOf(app).nextStartedActivity)
-            assertEquals(MainActivity::class.java.name, overview.component?.className)
-            assertEquals(MainActivity.ACTION_OPEN_NOTES_OVERVIEW, overview.action)
 
             template.send(app, 0, Intent().putExtra(EXTRA_SELECTED_BASE_NOTE, list))
             awaitTitle({ host.getViewFor(widgetId) }, "Shopping")

@@ -81,13 +81,22 @@ class WidgetRecordingScreenshotTest {
         val dropdown = widget.findViewById<View>(R.id.WidgetNoteDropdown)
         val voice = widget.findViewById<View>(R.id.WidgetVoice)
         assertTrue(title.layout.getEllipsisCount(0) > 0)
-        assertEquals(changeNote.parent, title.parent)
-        assertEquals(voice.parent, title.parent)
+        val titleArea = widget.findViewById<View>(R.id.WidgetTitleArea)
+        val newNote = widget.findViewById<View>(R.id.WidgetNewNote)
+        val openApp = widget.findViewById<View>(R.id.WidgetOpenApp)
+        assertEquals(titleArea, title.parent)
+        assertEquals(titleArea, dropdown.parent)
+        assertEquals(changeNote.parent, titleArea.parent)
+        assertEquals(voice.parent, titleArea.parent)
         assertTrue(
-            kotlin.math.abs(title.top + title.height / 2 - voice.top - voice.height / 2) <= 1
+            kotlin.math.abs(
+                titleArea.top + title.top + title.height / 2 - voice.top - voice.height / 2
+            ) <= 1
         )
         assertTrue(title.right <= dropdown.left)
-        assertTrue(dropdown.right <= changeNote.left)
+        assertTrue(titleArea.right <= newNote.left)
+        assertTrue(newNote.right <= openApp.left)
+        assertTrue(openApp.right <= changeNote.left)
     }
 
     private fun render(

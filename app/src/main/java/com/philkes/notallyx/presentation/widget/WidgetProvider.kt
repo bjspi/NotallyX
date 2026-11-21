@@ -338,20 +338,17 @@ class WidgetProvider : AppWidgetProvider() {
                         setInt(R.id.WidgetVoice, "setColorFilter", controlsColor)
                         setInt(R.id.WidgetDiscardRecording, "setColorFilter", controlsColor)
                         setTextColor(R.id.WidgetRecordingTimer, controlsColor)
+                        setInt(R.id.WidgetOpenApp, "setColorFilter", controlsColor)
+                        setOnClickPendingIntent(
+                            R.id.WidgetOpenApp,
+                            context.getWidgetOpenAppPendingIntent(),
+                        )
                         if (header != null) {
                             // The body opens the note alone so that Back returns to the home
-                            // screen, the title opens it on top of the notes overview
+                            // screen, the title switches the shown note
                             setOnClickPendingIntent(
                                 R.id.Layout,
                                 context.getWidgetOpenNotePendingIntent(noteId, header.type),
-                            )
-                            setOnClickPendingIntent(
-                                R.id.WidgetTitle,
-                                context.getWidgetOpenNotePendingIntent(
-                                    noteId,
-                                    header.type,
-                                    withOverview = true,
-                                ),
                             )
                             setTextViewText(R.id.WidgetTitle, header.title)
                             setTextViewTextSize(
@@ -361,7 +358,6 @@ class WidgetProvider : AppWidgetProvider() {
                             )
                         } else {
                             setOnClickPendingIntent(R.id.Layout, selectNote)
-                            setOnClickPendingIntent(R.id.WidgetTitle, null)
                             setTextViewText(R.id.WidgetTitle, "")
                         }
                         setOnClickPendingIntent(R.id.ChangeNote, selectNote)
@@ -425,16 +421,20 @@ class WidgetProvider : AppWidgetProvider() {
                 if (noteId != null) View.VISIBLE else View.GONE,
             )
             setViewVisibility(R.id.WidgetNotePicker, if (open) View.VISIBLE else View.GONE)
-            if (noteId == null) return
+            if (noteId == null) {
+                setOnClickPendingIntent(R.id.WidgetTitleArea, null)
+                return
+            }
             setInt(R.id.WidgetNoteDropdown, "setColorFilter", textColor)
+            // Title and arrow form one target since switching the note is the common action
             setContentDescription(
-                R.id.WidgetNoteDropdown,
+                R.id.WidgetTitleArea,
                 context.getString(
                     if (open) R.string.widget_close_note_picker else R.string.widget_switch_note
                 ),
             )
             setOnClickPendingIntent(
-                R.id.WidgetNoteDropdown,
+                R.id.WidgetTitleArea,
                 PendingIntent.getBroadcast(
                     context,
                     widgetId,
@@ -448,20 +448,6 @@ class WidgetProvider : AppWidgetProvider() {
             )
             if (!open) return
             setTextColor(R.id.WidgetNotePickerTitle, textColor)
-            setInt(R.id.WidgetOpenNotes, "setColorFilter", textColor)
-            setOnClickPendingIntent(
-                R.id.WidgetOpenNotes,
-                PendingIntent.getActivity(
-                    context,
-                    0,
-                    Intent(context, MainActivity::class.java)
-                        .setAction(MainActivity.ACTION_OPEN_NOTES_OVERVIEW)
-                        .addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                        ),
-                    PendingIntent.FLAG_IMMUTABLE,
-                ),
-            )
             val adapterIntent =
                 Intent(context, WidgetService::class.java)
                     .setAction(WidgetService.ACTION_NOTE_CHOICES)
@@ -610,37 +596,35 @@ class WidgetProvider : AppWidgetProvider() {
                 .setAction(MainActivity.ACTION_OPEN_NOTES_OVERVIEW)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
 
-        /**
-         * Opens the note from the widget in a fresh task. With [withOverview] the notes overview
-         * lies below it, so Back leads to all notes instead of the home screen.
-         */
+        /** Opens the note from the widget alone in a fresh task, so Back returns home. */
         internal fun Context.getWidgetOpenNotePendingIntent(
             noteId: Long,
             noteType: Type,
-            withOverview: Boolean = false,
         ): PendingIntent {
-            // The own actions keep these apart from the open-note intents of notifications
+            // The own action keeps these apart from the open-note intents of notifications
             val note = getOpenNoteIntent(noteId, noteType)
-            return if (withOverview) {
-                note.action = ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW
-                note.flags = 0
-                PendingIntent.getActivities(
-                    this,
-                    noteId.hashCode(),
-                    arrayOf(notesOverviewIntent(), note),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-            } else {
-                note.action = ACTION_WIDGET_OPEN_NOTE
-                note.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                PendingIntent.getActivity(
-                    this,
-                    noteId.hashCode(),
-                    note,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-            }
+            note.action = ACTION_WIDGET_OPEN_NOTE
+            note.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            return PendingIntent.getActivity(
+                this,
+                noteId.hashCode(),
+                note,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         }
+
+        /** Brings the app to the front on its notes overview. */
+        private fun Context.getWidgetOpenAppPendingIntent(): PendingIntent =
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java)
+                    .setAction(MainActivity.ACTION_OPEN_NOTES_OVERVIEW)
+                    .addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    ),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
 
         /** Creates a new text note from the widget, with the notes overview below it. */
         internal fun Context.getWidgetNewNotePendingIntent(): PendingIntent =
@@ -700,8 +684,6 @@ class WidgetProvider : AppWidgetProvider() {
         const val ACTION_OPEN_LIST = "com.philkes.notallyx.ACTION_OPEN_LIST"
         const val ACTION_SELECT_NOTE = "com.philkes.notallyx.ACTION_SELECT_NOTE"
         private const val ACTION_WIDGET_OPEN_NOTE = "com.philkes.notallyx.ACTION_WIDGET_OPEN_NOTE"
-        private const val ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW =
-            "com.philkes.notallyx.ACTION_WIDGET_OPEN_NOTE_WITH_OVERVIEW"
         private const val ACTION_WIDGET_NEW_NOTE = "com.philkes.notallyx.ACTION_WIDGET_NEW_NOTE"
 
         const val ACTION_CHECKED_CHANGED = "com.philkes.notallyx.ACTION_CHECKED_CHANGED"
