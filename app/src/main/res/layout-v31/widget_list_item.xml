@@ -1,18 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:id="@+id/LinearLayout"
+  android:layout_width="match_parent"
   android:layout_height="wrap_content"
-  android:layout_width="match_parent">
-<CheckBox
+  android:orientation="horizontal"
+  android:paddingEnd="12dp"
+  android:theme="@style/AppTheme">
+
+  <!-- Without text, so that a tap on the text edits the entry instead of checking it -->
+  <CheckBox
     android:id="@+id/CheckBox"
-    android:layout_width="match_parent"
+    android:layout_width="wrap_content"
     android:layout_height="wrap_content"
+    android:layout_gravity="center_vertical"
     android:layout_marginStart="12dp"
-    android:layout_marginEnd="16dp"
+    android:minWidth="0dp"
+    android:minHeight="0dp"
+    android:theme="@style/AppTheme" />
+
+  <TextView
+    android:id="@+id/CheckBoxText"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center_vertical"
+    android:layout_marginEnd="4dp"
+    android:layout_weight="1"
+    android:background="?android:attr/selectableItemBackground"
     android:paddingStart="4dp"
     android:paddingTop="8dp"
-    android:paddingEnd="0dp"
     android:paddingBottom="8dp"
-    android:textAppearance="?attr/textAppearanceBodyMedium"
-    android:theme="@style/AppTheme" />
+    android:textAlignment="textStart"
+    android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+  <ImageView
+    android:id="@+id/DeleteItem"
+    android:layout_width="40dp"
+    android:layout_height="40dp"
+    android:layout_gravity="center_vertical"
+    android:background="?android:attr/selectableItemBackgroundBorderless"
+    android:contentDescription="@string/widget_delete_list_item"
+    android:padding="8dp"
+    android:src="@drawable/delete"
+    android:visibility="gone" />
 </LinearLayout>

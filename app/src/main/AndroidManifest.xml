@@ -144,6 +144,14 @@
             android:taskAffinity="${applicationId}.widgetRecording"
             android:theme="@style/AppTheme.WidgetRecording" />
 
+        <activity
+            android:name=".presentation.widget.WidgetListItemActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.widgetListItem"
+            android:theme="@style/AppTheme.WidgetDialog"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
         <activity android:name=".presentation.activity.note.PlayAudioActivity" />
 
         <activity

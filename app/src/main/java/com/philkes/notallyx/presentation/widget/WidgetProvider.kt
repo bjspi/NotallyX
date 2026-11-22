@@ -76,6 +76,9 @@ class WidgetProvider : AppWidgetProvider() {
             ACTION_OPEN_NOTE -> openActivity(context, intent, EditNoteActivity::class.java)
             ACTION_OPEN_LIST -> openActivity(context, intent, EditListActivity::class.java)
             ACTION_CHECKED_CHANGED -> checkChanged(intent, context)
+            ACTION_ADD_ITEM,
+            ACTION_EDIT_ITEM,
+            ACTION_DELETE_ITEM -> openListItemDialog(context, intent)
             ACTION_SELECT_NOTE -> openActivity(context, intent, ConfigureWidgetActivity::class.java)
             ACTION_TOGGLE_NOTE_CHOICES,
             ACTION_PICK_WIDGET_NOTE -> handleNotePicker(context, intent)
@@ -129,7 +132,7 @@ class WidgetProvider : AppWidgetProvider() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                app.log("WidgetProvider", throwable = e)
+                app.log(TAG, throwable = e)
             } finally {
                 pendingResult.finish()
             }
@@ -173,6 +176,21 @@ class WidgetProvider : AppWidgetProvider() {
                 }
             }
         }
+    }
+
+    private fun openListItemDialog(context: Context, intent: Intent) {
+        val noteId = intent.getLongExtra(EXTRA_SELECTED_BASE_NOTE, 0)
+        val position = intent.getIntExtra(EXTRA_POSITION, -1)
+        val body = intent.getStringExtra(EXTRA_ITEM_BODY).orEmpty()
+        context.startActivity(
+            when (intent.action) {
+                ACTION_EDIT_ITEM ->
+                    WidgetListItemActivity.editIntent(context, noteId, position, body)
+                ACTION_DELETE_ITEM ->
+                    WidgetListItemActivity.deleteIntent(context, noteId, position, body)
+                else -> WidgetListItemActivity.addIntent(context, noteId)
+            }
+        )
     }
 
     private suspend fun changeChildChecked(
@@ -554,6 +572,35 @@ class WidgetProvider : AppWidgetProvider() {
             }
         }
 
+        fun getWidgetEditItemIntent(listNoteId: Long, position: Int, body: String): Intent =
+            getWidgetItemIntent(ACTION_EDIT_ITEM, listNoteId, position, body)
+
+        fun getWidgetDeleteItemIntent(listNoteId: Long, position: Int, body: String): Intent =
+            getWidgetItemIntent(ACTION_DELETE_ITEM, listNoteId, position, body)
+
+        private fun getWidgetItemIntent(
+            action: String,
+            listNoteId: Long,
+            position: Int,
+            body: String,
+        ): Intent {
+            return Intent().apply {
+                this.action = action
+                putExtra(EXTRA_POSITION, position)
+                putExtra(EXTRA_ITEM_BODY, body)
+                putExtra(EXTRA_SELECTED_BASE_NOTE, listNoteId)
+                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            }
+        }
+
+        fun getWidgetAddItemIntent(listNoteId: Long): Intent {
+            return Intent().apply {
+                action = ACTION_ADD_ITEM
+                putExtra(EXTRA_SELECTED_BASE_NOTE, listNoteId)
+                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            }
+        }
+
         private fun Intent.setOpenNoteIntent(noteType: Type, noteId: Long) = apply {
             action =
                 when (noteType) {
@@ -706,6 +753,11 @@ class WidgetProvider : AppWidgetProvider() {
         private const val ACTION_WIDGET_NEW_NOTE = "com.philkes.notallyx.ACTION_WIDGET_NEW_NOTE"
 
         const val ACTION_CHECKED_CHANGED = "com.philkes.notallyx.ACTION_CHECKED_CHANGED"
+        private const val ACTION_EDIT_ITEM = "com.philkes.notallyx.ACTION_WIDGET_EDIT_ITEM"
+        private const val ACTION_DELETE_ITEM = "com.philkes.notallyx.ACTION_WIDGET_DELETE_ITEM"
+        private const val ACTION_ADD_ITEM = "com.philkes.notallyx.ACTION_WIDGET_ADD_ITEM"
+        private const val EXTRA_ITEM_BODY = "com.philkes.notallyx.EXTRA_ITEM_BODY"
+        private const val TAG = "WidgetProvider"
         internal const val ACTION_TOGGLE_NOTE_CHOICES =
             "com.philkes.notallyx.ACTION_TOGGLE_NOTE_CHOICES"
         internal const val ACTION_PICK_WIDGET_NOTE = "com.philkes.notallyx.ACTION_PICK_WIDGET_NOTE"

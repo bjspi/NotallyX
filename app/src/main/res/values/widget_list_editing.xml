@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme.WidgetDialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+    <string name="widget_delete_list_item">Delete item</string>
+    <string name="widget_add_list_item_confirm">Add</string>
+    <string name="widget_add_list_item_another">Another</string>
+    <string name="widget_list_edit_failed">Could not change the list. It may have changed meanwhile.</string>
+    <string name="widget_edit_list_item">Edit item</string>
+    <string name="widget_delete_list_item_message">Delete “%1$s”?</string>
+</resources>

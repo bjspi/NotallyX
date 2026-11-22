@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_delete_list_item">Eintrag löschen</string>
+    <string name="widget_add_list_item_confirm">Hinzufügen</string>
+    <string name="widget_add_list_item_another">Weiterer</string>
+    <string name="widget_list_edit_failed">Die Liste konnte nicht geändert werden, vielleicht hat sie sich inzwischen geändert.</string>
+    <string name="widget_edit_list_item">Eintrag bearbeiten</string>
+    <string name="widget_delete_list_item_message">„%1$s“ löschen?</string>
+</resources>

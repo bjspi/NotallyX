@@ -15,10 +15,14 @@ import com.philkes.notallyx.data.model.ListItem
 import com.philkes.notallyx.data.model.Type
 import com.philkes.notallyx.presentation.view.note.renderedBody
 import com.philkes.notallyx.presentation.viewmodel.preference.NotallyXPreferences
+import com.philkes.notallyx.presentation.viewmodel.preference.autoSortByCheckedEnabled
 import com.philkes.notallyx.presentation.viewmodel.preference.displayBodySize
 import com.philkes.notallyx.presentation.viewmodel.preference.markdownBlankLineScale
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.extractWidgetColors
+import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetAddItemIntent
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetCheckedChangeIntent
+import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetDeleteItemIntent
+import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetEditItemIntent
 import com.philkes.notallyx.presentation.widget.WidgetProvider.Companion.getWidgetOpenNoteIntent
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -29,6 +33,8 @@ class WidgetFactory(
 ) : RemoteViewsService.RemoteViewsFactory, KoinComponent {
 
     private var baseNote: BaseNote? = null
+    /** Row of the "Add item" entry within a list, see [WidgetListEdits.addPosition]. */
+    private var addItemPosition = 0
     private var database: NotallyDatabase? = null
     private val preferences: NotallyXPreferences by inject()
 
@@ -45,7 +51,7 @@ class WidgetFactory(
         return if (copy != null) {
             when (copy.type) {
                 Type.NOTE -> if (copy.body.isEmpty()) 0 else 1
-                Type.LIST -> copy.items.size
+                Type.LIST -> copy.items.size + 1
             }
         } else 0
     }
@@ -53,6 +59,10 @@ class WidgetFactory(
     override fun onDataSetChanged() {
         database = NotallyDatabase.getDatabase(app).value
         baseNote = database?.getBaseNoteDao()?.get(id)
+        addItemPosition =
+            baseNote?.let {
+                WidgetListEdits.addPosition(it.items, preferences.autoSortByCheckedEnabled)
+            } ?: 0
     }
 
     override fun getViewAt(position: Int): RemoteViews {
@@ -61,7 +71,12 @@ class WidgetFactory(
 
         return when (copy.type) {
             Type.NOTE -> getNoteView(copy)
-            Type.LIST -> getListItemView(position, copy)
+            Type.LIST ->
+                when {
+                    position == addItemPosition -> getAddItemView(copy)
+                    position < addItemPosition -> getListItemView(position, copy)
+                    else -> getListItemView(position - 1, copy)
+                }
         }
     }
 
@@ -92,8 +107,13 @@ class WidgetFactory(
             }
         return view.apply {
             val (_, controlsColor) = app.extractWidgetColors(list.color, preferences)
+            // The box checks the entry, its text opens it for editing
+            setListItemTextView(item, R.id.CheckBoxText, controlsColor)
+            setOnClickFillInIntent(
+                R.id.CheckBoxText,
+                getWidgetEditItemIntent(list.id, index, item.body),
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                setListItemTextView(item, R.id.CheckBox, controlsColor)
                 setCompoundButtonChecked(R.id.CheckBox, item.checked)
                 val checkIntent = getWidgetCheckedChangeIntent(list.id, index)
                 setOnCheckedChangeResponse(
@@ -106,17 +126,35 @@ class WidgetFactory(
                     ColorStateList.valueOf(controlsColor),
                 )
             } else {
-                setListItemTextView(item, R.id.CheckBoxText, controlsColor)
                 setImageViewResource(
                     R.id.CheckBox,
                     if (item.checked) R.drawable.checkbox_fill else R.drawable.checkbox_outline,
                 )
-                setOnClickFillInIntent(
-                    R.id.LinearLayout,
-                    getWidgetCheckedChangeIntent(list.id, index),
-                )
+                setOnClickFillInIntent(R.id.CheckBox, getWidgetCheckedChangeIntent(list.id, index))
                 setImageViewColor(R.id.CheckBox, controlsColor)
             }
+            setViewVisibility(R.id.DeleteItem, if (item.checked) View.VISIBLE else View.GONE)
+            if (item.checked) {
+                setImageViewColor(R.id.DeleteItem, controlsColor)
+                setOnClickFillInIntent(
+                    R.id.DeleteItem,
+                    getWidgetDeleteItemIntent(list.id, index, item.body),
+                )
+            }
+        }
+    }
+
+    private fun getAddItemView(list: BaseNote): RemoteViews {
+        return RemoteViews(app.packageName, R.layout.widget_list_add_item).apply {
+            val (_, controlsColor) = app.extractWidgetColors(list.color, preferences)
+            setTextViewTextSize(
+                R.id.AddItemText,
+                TypedValue.COMPLEX_UNIT_SP,
+                preferences.textSizeNoteEditor.value.displayBodySize,
+            )
+            setTextColor(R.id.AddItemText, controlsColor)
+            setImageViewColor(R.id.AddItemIcon, controlsColor)
+            setOnClickFillInIntent(R.id.AddItem, getWidgetAddItemIntent(list.id))
         }
     }
 
@@ -143,7 +181,7 @@ class WidgetFactory(
         setInt(viewId, "setColorFilter", color)
     }
 
-    override fun getViewTypeCount() = 3
+    override fun getViewTypeCount() = 4
 
     override fun hasStableIds(): Boolean {
         return false
