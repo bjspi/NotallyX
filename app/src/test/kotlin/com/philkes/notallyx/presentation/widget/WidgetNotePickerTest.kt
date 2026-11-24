@@ -129,6 +129,18 @@ class WidgetNotePickerTest {
             val template = choices.tag as PendingIntent
             capture(root, choices, factory)
 
+            // A tap beside the notes closes the picker and keeps the shown note
+            fun pickerVisibility() =
+                host.getViewFor(widgetId).findViewById<View>(R.id.WidgetNotePicker).visibility
+            assertTrue(root.findViewById<View>(R.id.WidgetNotePicker).performClick())
+            awaitWidget { pickerVisibility() == View.GONE }
+            awaitTitle({ host.getViewFor(widgetId) }, "Trip ideas")
+            assertEquals(note, preferences.getWidgetData(widgetId))
+            assertTrue(
+                host.getViewFor(widgetId).findViewById<View>(R.id.WidgetTitleArea).performClick()
+            )
+            awaitWidget { pickerVisibility() == View.VISIBLE }
+
             template.send(app, 0, Intent().putExtra(EXTRA_SELECTED_BASE_NOTE, list))
             awaitTitle({ host.getViewFor(widgetId) }, "Shopping")
             assertEquals(

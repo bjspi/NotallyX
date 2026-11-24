@@ -453,8 +453,7 @@ class WidgetProvider : AppWidgetProvider() {
                     if (open) R.string.widget_close_note_picker else R.string.widget_switch_note
                 ),
             )
-            setOnClickPendingIntent(
-                R.id.WidgetTitleArea,
+            val toggle =
                 PendingIntent.getBroadcast(
                     context,
                     widgetId,
@@ -464,8 +463,10 @@ class WidgetProvider : AppWidgetProvider() {
                         .putExtra(EXTRA_OPEN_NOTE_PICKER, !open)
                         .apply { embedIntentExtras() },
                     PendingIntent.FLAG_IMMUTABLE,
-                ),
-            )
+                )
+            setOnClickPendingIntent(R.id.WidgetTitleArea, toggle)
+            // A tap beside the notes closes the open picker and keeps the shown note
+            setOnClickPendingIntent(R.id.WidgetNotePicker, toggle.takeIf { open })
             if (!open) return
             setTextColor(R.id.WidgetNotePickerTitle, textColor)
             val adapterIntent =
